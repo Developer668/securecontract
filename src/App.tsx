@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { Opportunity, SourceConfig } from "./types";
 
-type View = "opportunities" | "sources" | "application";
+type View = "opportunities" | "sources" | "application" | "assistant";
 type DetailTab =
   | "summary"
   | "evidence"
@@ -111,6 +111,7 @@ function Header({
         : "Demonstration mode";
   const navigation: Array<[View, string]> = [
     ["opportunities", "Discover"],
+    ["assistant", "Ask AI"],
     ["sources", "Operations"],
     ["application", "Workspace"],
   ];
@@ -622,6 +623,13 @@ function Copilot({ item }: { item: Opportunity }) {
       )}
     </div>
   );
+}
+
+function ContractAssistant({ items }: { items: Opportunity[] }) {
+  const [question,setQuestion]=useState(""); const [loading,setLoading]=useState(false); const [messages,setMessages]=useState<Array<{id:string;role:'user'|'assistant';text:string;ids?:string[];searched?:number;read?:number}>>([{id:'welcome',role:'assistant',text:'Describe the contract you need. I will search saved open contracts, read the most relevant records and their official links, then explain the trade-offs.'}]);
+  const send=async()=>{const prompt=question.trim();if(!prompt||loading)return;setQuestion('');setLoading(true);setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'user',text:prompt}]);try{const response=await fetch('/api/copilot/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:prompt})});const body=await response.json() as {answer?:string;error?:string;opportunityIds?:string[];recordsSearched?:number;recordsRead?:number};setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'assistant',text:body.answer??body.error??'The contract search could not answer.',ids:body.opportunityIds,searched:body.recordsSearched,read:body.recordsRead}]);}finally{setLoading(false)}};
+  const byId=new Map(items.map((item)=>[item.id,item]));
+  return <main className="assistant-page"><header className="assistant-head"><span className="copilot-orb"><Sparkles size={20}/></span><div><p className="eyebrow">SecureContract AI</p><h1>Find the right public contract.</h1><p>Answers use the saved contract database and the live official links attached to retrieved records.</p></div></header><section className="assistant-messages">{messages.map((message)=><article key={message.id} className={message.role}><span>{message.role==='assistant'?<Bot size={18}/>:'You'}</span><div><p>{message.text}</p>{message.ids?.length?<div className="assistant-results">{message.ids.map((id)=>{const item=byId.get(id);return item?<a key={id} href={item.detailUrl??item.sourceUrl} target="_blank" rel="noreferrer"><strong>{item.titleOriginal}</strong><small>{item.buyerOriginal} · {item.countryName} · {fmt(item.submissionDueAt,item.localTimezone)}</small><em>Official source <ArrowUpRight size={12}/></em></a>:null})}</div>:null}{message.searched!==undefined&&<small className="search-accountability">Searched {message.searched.toLocaleString()} saved contracts · read {message.read} relevant records</small>}</div></article>)}{loading&&<p className="copilot-thinking"><span/><span/><span/> Retrieving contracts and official source context…</p>}</section><form className="assistant-composer" onSubmit={(event)=>{event.preventDefault();void send()}}><textarea value={question} onChange={(event)=>setQuestion(event.target.value)} placeholder="For example: cloud migration contracts in the US over the next 60 days"/><button disabled={loading||!question.trim()} aria-label="Search contracts">{loading?<RefreshCw className="spin" size={18}/>:<Send size={18}/>}</button></form></main>;
 }
 
 function Detail({
@@ -1271,6 +1279,8 @@ export default function App() {
       <Header view={view} setView={setView} provenance={provenance} />
       {view === "sources" ? (
         <SourcesView sources={sources} onRefresh={loadData} />
+      ) : view === "assistant" ? (
+        <ContractAssistant items={items} />
       ) : (
         <OpportunitiesView
           key={`${view}-${provenance}`}
