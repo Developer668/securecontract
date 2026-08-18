@@ -1,76 +1,90 @@
 import { expect, test } from "@playwright/test";
 
-test("core opportunity workflow", async ({ page }) => {
+test("discovers evidence-grounded US biomedical funding", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
-  const opportunityResponse = await page.request.get("/api/opportunities");
-  expect(opportunityResponse.ok()).toBe(true);
-  const opportunityBody = await opportunityResponse.json();
-  expect(opportunityBody.provenance).toBe("recorded_live");
-  expect(opportunityBody.data.length).toBeGreaterThan(5000);
-  await expect(page.getByLabel("Status filter")).toHaveValue("open");
-  await expect(page.getByRole("complementary")).toHaveCount(0);
-  await page.getByLabel("Status filter").selectOption("all");
-  await expect(page.getByText("NSW Roadmap - Tender Round 9").first()).toBeVisible();
-  await page.getByText("NSW Roadmap - Tender Round 9").first().click();
-  await page.getByRole("button", { name: "Raw" }).click();
-  await expect(page.getByText("Immutable source row")).toBeVisible();
-  await expect(page.getByText("Completed Bright Data custom collector dataset run")).toBeVisible();
-  await page.getByRole("button", { name: /Changes/ }).click();
-  await expect(page.getByRole("heading", { name: "No material changes observed" })).toBeVisible();
-  const detail = page.getByRole("complementary");
-  await detail.getByRole("button", { name: "Workspace" }).click();
-  await expect(page.getByRole("heading", { name: "Application checklist" })).toBeVisible();
-  await detail.getByRole("button", { name: "Copilot", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Reason over this opportunity—not the open web." })).toBeVisible();
-  await expect(page.getByText("Evidence in scope")).toBeVisible();
+  await expect(page).toHaveTitle(/FundingSecured/);
+  await expect(page.getByRole("heading", { name: /Find the funding your science/ })).toBeVisible();
+  await expect(page.getByLabel("Ask FundingSecured")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Funding matches" })).toBeVisible();
+  await expect(page.getByText("US only")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What changed" })).toBeVisible();
+  const viewportWidth = await page.evaluate(() => window.innerWidth);
+  const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(documentWidth).toBeLessThanOrEqual(viewportWidth);
+
+  const response = await page.request.get("/api/funding/opportunities");
+  expect(response.ok()).toBe(true);
+  const body = (await response.json()) as {
+    provenance: string;
+    data: Array<{ geography: string; provenance: string; match: { eligibility: string }; evidence: unknown[] }>;
+  };
+  expect(body.provenance).toBe("recorded_demo");
+  expect(body.data.length).toBeGreaterThanOrEqual(6);
+  expect(body.data.every((item) => item.geography === "US")).toBe(true);
+  expect(body.data.every((item) => item.provenance === "recorded_demo")).toBe(true);
+  expect(body.data.every((item) => item.match.eligibility !== "verified_eligible")).toBe(true);
 });
 
-test("filters and one-click live operations", async ({ page }) => {
+test("opens fit, exact evidence, and application tasks", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByLabel("Status filter")).toHaveValue("open");
-  const response = await page.request.get("/api/opportunities");
-  const opportunities = (await response.json()) as { data: Array<{ status: string }> };
-  const openCount = opportunities.data.filter((item) => item.status === "open").length;
-  await expect(page.getByText(`${openCount} opportunities`)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Find more opportunities" })).toBeEnabled();
-  await page.locator(".advanced-filters summary").click();
-  await page.getByLabel("Buyer or agency").fill("Transportation");
-  await expect(page.locator(".result-count strong")).not.toHaveText(String(openCount));
-  await page.getByRole("button", { name: "Clear advanced filters" }).click();
-  await page.getByLabel("Status filter").selectOption("all");
-  await page.getByLabel("Country filter").selectOption("AU");
-  await expect(page.getByText("Capacity Investment Scheme NEM Dispatchable").first()).toBeVisible();
-  await page.getByRole("button", { name: "Operations" }).click();
-  await expect(page.getByRole("heading", { name: "Sources", exact: true })).toBeVisible();
-  const sourceResponse = await page.request.get("/api/sources");
-  expect(sourceResponse.ok()).toBe(true);
-  const body = (await sourceResponse.json()) as {
-    data: Array<{ slug: string; latestRun: { validRowCount: number; metrics: { dateParseRate: number } } | null }>;
+  await page.getByRole("heading", { name: "NIH Research Project Grant Program (R01)" }).click();
+  const drawer = page.getByRole("complementary", { name: "Funding opportunity detail" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText("Likely eligible — confirm")).toBeVisible();
+  await expect(drawer.getByText("Specific NIH institute alignment")).toBeVisible();
+
+  await drawer.getByRole("button", { name: /Evidence/ }).click();
+  await expect(drawer.getByText(/Applications must fit within the mission/)).toBeVisible();
+  await expect(drawer.getByRole("link", { name: "Open exact source" }).first()).toHaveAttribute("href", /^https:/);
+
+  await drawer.getByRole("button", { name: /Plan/ }).click();
+  await expect(drawer.getByText("Application timeline")).toBeVisible();
+  const firstTask = drawer.getByRole("checkbox").first();
+  await expect(firstTask).toBeEnabled();
+  await expect(drawer.getByText("Select the participating NIH institute and exact NOFO")).toBeVisible();
+});
+
+test("provides a dedicated guide, editable lab profile, and Bright Data-only operations", async ({ page }) => {
+  await page.goto("/");
+  const desktopNav = page.getByRole("navigation", { name: "Primary navigation" });
+  if (await desktopNav.isVisible()) {
+    await desktopNav.getByRole("button", { name: "Funding guide" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await page.locator(".mobile-menu").getByRole("button", { name: "Funding guide" }).click();
+  }
+  if (await desktopNav.isVisible()) {
+    await expect(page.getByRole("heading", { name: "Reason across the portfolio." })).toBeVisible();
+  }
+  await expect(page.getByText("NVIDIA NIM · evidence constrained")).toBeVisible();
+
+  if (await desktopNav.isVisible()) {
+    await desktopNav.getByRole("button", { name: "Lab profile" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await page.locator(".mobile-menu").getByRole("button", { name: "Lab profile" }).click();
+  }
+  await expect(page.getByRole("heading", { name: "Your science, represented with precision." })).toBeVisible();
+  await expect(page.getByLabel("Lab or company name")).toHaveValue("Northstar Translational Lab");
+
+  if (await desktopNav.isVisible()) {
+    await desktopNav.getByRole("button", { name: "Collectors" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await page.locator(".mobile-menu").getByRole("button", { name: "Collectors" }).click();
+  }
+  await expect(page.getByText("Bright Data only")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "8 curated sources" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Break it safely. Repair it visibly." })).toBeVisible();
+  await page.getByRole("button", { name: "Connect Collector" }).first().click();
+  await expect(page.getByText("Paste the Collector ID returned by Bright Data Scraper Studio.")).toBeVisible();
+
+  const sources = await page.request.get("/api/funding/sources");
+  const sourceBody = (await sources.json()) as {
+    collectionBoundary: string;
+    data: Array<{ collectionMethod: string; collectorId: string | null }>;
   };
-  const asl = body.data.find((source) => source.slug === "australia-asl-tenders");
-  expect(asl?.latestRun?.validRowCount).toBe(4);
-  expect(asl?.latestRun?.metrics.dateParseRate).toBe(1);
-  await expect(page.getByRole("button", { name: "Run all live sources" })).toBeEnabled();
-  await expect(page.getByText("CanadaBuys tender opportunities")).toBeVisible();
-  await expect(page.getByText("VendorPanel Australian public tenders")).toBeVisible();
-  await expect(page.getByText("Québec SEAO open calls for tenders")).toBeVisible();
-  await expect(page.getByText("Texas DOT official bid projects")).toBeVisible();
-  await expect(page.getByText("Los Angeles RAMP open bid opportunities")).toBeVisible();
-  await expect(page.getByText("EU TED open procurement notices")).toBeVisible();
-  await expect(page.getByText("City of Chicago active solicitations")).toBeVisible();
-  await expect(page.getByText("New York City current bids")).toBeVisible();
-  await expect(page.getByText("Montgomery County active solicitations")).toBeVisible();
-  await expect(page.getByText("San Francisco open bid opportunities")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Source unavailable" })).toBeDisabled();
-  await expect(page.getByText("882 rows · 882 valid")).toBeVisible();
-  await expect(page.getByText("700 rows · 700 valid")).toBeVisible();
-  await expect(page.getByText("342 rows · 342 valid")).toBeVisible();
-  await expect(page.getByText("391 rows · 391 valid")).toBeVisible();
-  await expect(page.getByText("89 rows · 89 valid")).toBeVisible();
-  await expect(page.getByText("39593 rows · 39593 valid")).toBeVisible();
-  await expect(page.getByText("50 rows · 50 valid")).toBeVisible();
-  await expect(page.getByText("2 verified scraper repairs")).toBeVisible();
-  await expect(page.getByLabel("Operator secret")).toHaveCount(0);
+  expect(sourceBody.collectionBoundary).toBe("bright_data_only");
+  expect(sourceBody.data.every((item) => item.collectionMethod === "bright_data")).toBe(true);
+  expect(sourceBody.data.every((item) => item.collectorId === null)).toBe(true);
 });

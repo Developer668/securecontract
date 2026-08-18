@@ -11,12 +11,14 @@ import {
 import { liveSources } from "../src/data/live-sources.js";
 import { BrightDataClient } from "../src/lib/bright-data/client.js";
 import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
+import { FundingNimProvider } from "../src/lib/ai/funding-provider.js";
 import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
+import { normalizeFundingRows } from "../src/lib/funding-ingestion.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
-import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 import { closeExpiredOpportunity } from "../src/lib/normalization.js";
 import { PostgresRepository } from "../db/repository.js";
-import type { SourceConfig } from "../src/types.js";
+import { defaultLabProfile, fundingOpportunities, fundingSources, initialFundingEvents } from "../src/data/funding-demo.js";
+import type { FundingEvent, FundingOpportunity, FundingSource, LabProfile, SourceConfig } from "../src/types.js";
 
 const app = express();
 app.use(compression());
@@ -189,6 +191,23 @@ const workspaces = new Map<
     }>;
   }
 >();
+const fundingOpportunityStore = new Map<string, FundingOpportunity>(
+  fundingOpportunities.map((item) => [item.id, structuredClone(item)]),
+);
+const fundingSourceStore = new Map<string, FundingSource>(
+  fundingSources.map((item) => [item.id, structuredClone(item)]),
+);
+let labProfile: LabProfile = structuredClone(defaultLabProfile);
+const fundingEvents: FundingEvent[] = structuredClone(initialFundingEvents);
+const fundingPendingRuns = new Map<string, { sourceId: string; startedAt: string }>();
+const eventClients = new Set<express.Response>();
+
+const publishFundingEvent = (event: FundingEvent) => {
+  fundingEvents.unshift(event);
+  fundingEvents.splice(100);
+  const payload = `event: funding\ndata: ${JSON.stringify(event)}\n\n`;
+  for (const client of eventClients) client.write(payload);
+};
 const cron = (
   request: express.Request,
   response: express.Response,
@@ -301,6 +320,7 @@ app.post("/api/sources", async (request, response) => {
     timezone: z.string().trim().min(3).max(80),
     currency: z.string().trim().max(3).nullable(),
     sourceLanguage: z.string().trim().min(2).max(15),
+    collectorId: z.string().regex(/^c_[a-zA-Z0-9]+$/),
   });
   const parsed = schema.safeParse(request.body);
   if (!parsed.success)
@@ -309,22 +329,6 @@ app.post("/api/sources", async (request, response) => {
       .json({ error: "Source details are incomplete or invalid" });
   try {
     const url = assertPublicHttpUrl(parsed.data.sourceUrl);
-    const probe = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: AbortSignal.timeout(12_000),
-      headers: { "User-Agent": "SecureContract source acceptance check" },
-    });
-    const sample = (await probe.text()).slice(0, 80_000).toLowerCase();
-    if (!probe.ok) throw new Error(`Public URL returned ${probe.status}`);
-    if (
-      /sign[ -]?in required|login required|access denied|captcha required/.test(
-        sample,
-      )
-    )
-      throw new Error(
-        "The target appears to require authentication or CAPTCHA",
-      );
     const slugBase = `${parsed.data.countryCode}-${parsed.data.name}`
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -338,12 +342,13 @@ app.post("/api/sources", async (request, response) => {
       currency: parsed.data.currency || null,
       inputUrl: url.toString(),
       sourceUrl: url.toString(),
-      collectorId: null,
+      collectorId: parsed.data.collectorId,
       adapterKey: "declarative",
       status: "draft",
       requiredFields: ["title", "detail_url"],
       publicAccessVerifiedAt: new Date().toISOString(),
       prebuiltLibraryCheckedAt: null,
+      collectionMethod: "bright_data",
     };
     if (postgres) await postgres.upsertSources([source]);
     else runtimeSources.push(source);
@@ -418,30 +423,6 @@ app.post("/api/runs/:sourceId", async (request, response) => {
   const sourceId = String(request.params.sourceId);
   const source = (await listSources()).find((item) => item.id === sourceId);
   if (!source) return response.status(404).json({ error: "Source not found" });
-  if (source.collectionMethod === "public_html" || source.collectionMethod === "public_api") {
-    try {
-      const collectionId = `public-${source.slug}-${Date.now()}`;
-      const rows = await scrapePublicSource(source);
-      const result = await ingestRows({
-        source,
-        collectionId,
-        rows,
-        store: postgres ?? memoryStore,
-        observedAt: new Date().toISOString(),
-        publish: source.publishToOpportunityFeed !== false,
-      });
-      return response.json({
-        run: result.run,
-        validation: result.validation,
-        publishedCount: result.published.length,
-        preservedLastKnownGood: result.preservedLastKnownGood,
-      });
-    } catch (error) {
-      return response.status(502).json({
-        error: error instanceof Error ? error.message : "Public scraper failed",
-      });
-    }
-  }
   if (!source.collectorId)
     return response.status(409).json({
       error:
@@ -633,6 +614,182 @@ app.post("/api/copilot", async (request, response) => {
     });
   }
 });
+
+app.get("/api/funding/opportunities", (_request, response) => {
+  const now = Date.now();
+  const data = [...fundingOpportunityStore.values()]
+    .map((item) => {
+      const expired = item.deadline && new Date(item.deadline).getTime() < now;
+      return expired && item.status !== "closed" ? { ...item, status: "closed" as const } : item;
+    })
+    .sort((left, right) => right.match.score - left.match.score);
+  response.json({
+    data,
+    provenance: data.some((item) => item.provenance === "bright_data_live")
+      ? "mixed"
+      : "recorded_demo",
+    notice: "Recorded demonstration opportunities are clearly labeled. Only records returned by connected Bright Data Collectors are marked live.",
+  });
+});
+
+app.get("/api/funding/opportunities/:id", (request, response) => {
+  const item = fundingOpportunityStore.get(String(request.params.id));
+  if (!item) return response.status(404).json({ error: "Funding opportunity not found" });
+  response.json({ data: item });
+});
+
+app.patch("/api/funding/opportunities/:id/tasks/:taskId", (request, response) => {
+  const item = fundingOpportunityStore.get(String(request.params.id));
+  if (!item) return response.status(404).json({ error: "Funding opportunity not found" });
+  const parsed = z.object({ done: z.boolean() }).safeParse(request.body);
+  if (!parsed.success) return response.status(400).json({ error: "A task completion state is required" });
+  const task = item.tasks.find((candidate) => candidate.id === String(request.params.taskId));
+  if (!task) return response.status(404).json({ error: "Task not found" });
+  task.status = parsed.data.done ? "done" : "todo";
+  response.json({ data: task });
+});
+
+app.get("/api/funding/profile", (_request, response) => response.json({ data: labProfile }));
+
+app.put("/api/funding/profile", (request, response) => {
+  const schema = z.object({
+    name: z.string().trim().min(2).max(160),
+    institution: z.string().trim().min(2).max(200),
+    country: z.literal("US"),
+    researchAreas: z.array(z.string().trim().min(1).max(120)).max(30),
+    methods: z.array(z.string().trim().min(1).max(120)).max(30),
+    careerStages: z.array(z.string().trim().min(1).max(120)).max(20),
+    equipment: z.array(z.string().trim().min(1).max(160)).max(30),
+    previousWork: z.array(z.string().trim().min(1).max(240)).max(30),
+    desiredFundingMin: z.number().nonnegative().nullable(),
+    desiredFundingMax: z.number().nonnegative().nullable(),
+    collaborationPreferences: z.array(z.string().trim().min(1).max(160)).max(20),
+    commercializationStage: z.string().trim().min(1).max(120),
+  }).safeParse(request.body);
+  if (!schema.success) return response.status(400).json({ error: schema.error.flatten() });
+  labProfile = { ...schema.data, updatedAt: new Date().toISOString() };
+  response.json({ data: labProfile });
+});
+
+app.get("/api/funding/sources", (_request, response) => {
+  response.json({
+    data: [...fundingSourceStore.values()],
+    brightDataConfigured: Boolean(brightDataToken),
+    collectionBoundary: "bright_data_only",
+  });
+});
+
+app.patch("/api/funding/sources/:id/collector", (request, response) => {
+  const source = fundingSourceStore.get(String(request.params.id));
+  if (!source) return response.status(404).json({ error: "Funding source not found" });
+  const parsed = z.object({ collectorId: z.string().regex(/^c_[a-zA-Z0-9]+$/) }).safeParse(request.body);
+  if (!parsed.success) return response.status(400).json({ error: "Enter a valid Bright Data Collector ID" });
+  source.collectorId = parsed.data.collectorId;
+  source.status = "active";
+  response.json({ data: source });
+});
+
+app.post("/api/funding/runs/:sourceId", async (request, response) => {
+  const source = fundingSourceStore.get(String(request.params.sourceId));
+  if (!source) return response.status(404).json({ error: "Funding source not found" });
+  if (!source.collectorId) return response.status(409).json({ error: "Connect a verified Bright Data Collector ID first" });
+  if (!brightDataToken) return response.status(503).json({ error: "Bright Data is not configured" });
+  try {
+    const collectionId = await new BrightDataClient(brightDataToken).trigger(source.collectorId, source.inputUrl);
+    fundingPendingRuns.set(collectionId, { sourceId: source.id, startedAt: new Date().toISOString() });
+    source.lastRunStatus = "pending";
+    publishFundingEvent({ id:randomUUID(), type:"source_run", title:`${source.name} started`, body:`Bright Data collection ${collectionId} is pending.`, opportunityId:null, sourceId:source.id, createdAt:new Date().toISOString() });
+    response.status(202).json({ collectionId, status: "pending" });
+  } catch (error) {
+    response.status(502).json({ error: error instanceof Error ? error.message : "Bright Data trigger failed" });
+  }
+});
+
+app.get("/api/funding/runs/:collectionId", async (request, response) => {
+  if (!brightDataToken) return response.status(503).json({ error: "Bright Data is not configured" });
+  const collectionId = String(request.params.collectionId);
+  const pending = fundingPendingRuns.get(collectionId);
+  if (!pending) return response.status(404).json({ error: "Funding run not found" });
+  const source = fundingSourceStore.get(pending.sourceId);
+  if (!source) return response.status(409).json({ error: "Funding source no longer exists" });
+  try {
+    const body = await new BrightDataClient(brightDataToken).dataset(collectionId);
+    if (!Array.isArray(body)) return response.status(202).json(body);
+    const normalized = normalizeFundingRows(source, body, pending.startedAt);
+    source.lastRunAt = new Date().toISOString();
+    source.recordCount = normalized.length;
+    fundingPendingRuns.delete(collectionId);
+    if (!normalized.length) {
+      source.lastRunStatus = "degraded";
+      source.status = "warning";
+      publishFundingEvent({ id:randomUUID(), type:"source_warning", title:`${source.name} failed its quality gate`, body:"No complete opportunity rows were published; last accepted records were preserved.", opportunityId:null, sourceId:source.id, createdAt:new Date().toISOString() });
+      return response.status(422).json({ error:"No rows contained both title and official detail URL", preservedLastKnownGood:true, publishedCount:0 });
+    }
+    source.lastRunStatus = "healthy";
+    source.status = "active";
+    for (const item of normalized) fundingOpportunityStore.set(item.id, item);
+    publishFundingEvent({ id:randomUUID(), type:"source_run", title:`${source.name} published ${normalized.length} record${normalized.length === 1 ? "" : "s"}`, body:"The raw Bright Data dataset passed the minimum funding schema gate.", opportunityId:normalized[0]?.id ?? null, sourceId:source.id, createdAt:new Date().toISOString() });
+    response.json({ data:normalized, publishedCount:normalized.length, preservedLastKnownGood:false });
+  } catch (error) {
+    response.status(502).json({ error: error instanceof Error ? error.message : "Bright Data polling failed" });
+  }
+});
+
+app.get("/api/funding/events", (request, response) => {
+  response.setHeader("Content-Type", "text/event-stream");
+  response.setHeader("Cache-Control", "no-cache, no-transform");
+  response.setHeader("Connection", "keep-alive");
+  response.flushHeaders();
+  eventClients.add(response);
+  for (const event of fundingEvents.slice(0, 12).reverse()) {
+    response.write(`event: funding\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  const heartbeat = setInterval(() => response.write(`event: heartbeat\ndata: ${JSON.stringify({ at:new Date().toISOString() })}\n\n`), 25_000);
+  request.on("close", () => {
+    clearInterval(heartbeat);
+    eventClients.delete(response);
+  });
+});
+
+app.get("/api/funding/event-history", (_request, response) => response.json({ data: fundingEvents }));
+
+app.get("/api/funding/healing", (_request, response) => response.json({
+  data: {
+    status: "ready_for_live_drill",
+    collectorId: null,
+    steps: [
+      "Run an approved foundation Collector and retain the raw baseline.",
+      "Detect a missing deadline or eligibility passage at the quality gate.",
+      "Review and approve a proposed field extraction change in Bright Data.",
+      "Rerun the same Collector ID and regenerate the affected lab tasks.",
+    ],
+    note: "No live funding Collector ID is fabricated in demonstration mode.",
+  },
+}));
+
+app.post("/api/funding/chat", async (request, response) => {
+  const parsed = z.object({
+    question: z.string().trim().min(2).max(3000),
+    opportunityIds: z.array(z.string()).max(12).default([]),
+  }).safeParse(request.body);
+  if (!parsed.success) return response.status(400).json({ error: "A valid funding question is required" });
+  if (!process.env.NVIDIA_API_KEY || !process.env.NVIDIA_NIM_MODEL)
+    return response.status(503).json({ error: "NVIDIA NIM not configured", code: "NIM_NOT_CONFIGURED" });
+  const all = [...fundingOpportunityStore.values()];
+  const selected = parsed.data.opportunityIds.length
+    ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
+    : all.filter((item) => item.status !== "closed").sort((a,b) => b.match.score-a.match.score).slice(0, 8);
+  try {
+    const provider = new FundingNimProvider({
+      apiKey: process.env.NVIDIA_API_KEY,
+      baseUrl: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
+      model: process.env.NVIDIA_NIM_MODEL,
+    });
+    response.json(await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected }));
+  } catch (error) {
+    response.status(502).json({ error: error instanceof Error ? error.message : "Funding chat failed" });
+  }
+});
 app.listen(port, () =>
-  console.log(`SecureContract API listening on http://localhost:${port}`),
+  console.log(`FundingSecured API listening on http://localhost:${port}`),
 );

@@ -10,7 +10,7 @@ export interface SourceConfig {
   adapterKey: string; status: 'draft' | 'active' | 'warning' | 'degraded' | 'disabled';
   requiredFields: string[]; publicAccessVerifiedAt: string | null; prebuiltLibraryCheckedAt: string | null;
   publishToOpportunityFeed?: boolean;
-  collectionMethod?: 'bright_data' | 'public_html' | 'public_api';
+  collectionMethod?: 'bright_data';
 }
 
 export interface FieldEvidence {
@@ -33,4 +33,119 @@ export interface Opportunity {
   detailUrl: string | null; documents: unknown[]; amendments: unknown[]; collectedAt: string; firstSeenAt: string; lastSeenAt: string;
   contentHash: string; verification: 'verified' | 'partial' | 'last_known_good'; sourceHealth: SourceHealth;
   evidence: FieldEvidence[]; changes: OpportunityChange[]; raw: Record<string, unknown>;
+}
+
+export type FundingEligibility =
+  | 'verified_eligible'
+  | 'likely_confirmation_required'
+  | 'insufficient_evidence'
+  | 'not_eligible';
+
+export type FundingCategory =
+  | 'federal'
+  | 'foundation'
+  | 'scientific_society'
+  | 'corporate_challenge'
+  | 'accelerator'
+  | 'equipment_access'
+  | 'compute_credit';
+
+export interface EvidencePassage {
+  id: string;
+  field: string;
+  passage: string;
+  sourceUrl: string;
+  observedAt: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface FundingRequirement {
+  id: string;
+  label: string;
+  state: 'met' | 'unknown' | 'unmet';
+  evidenceId: string | null;
+}
+
+export interface FundingMatch {
+  eligibility: FundingEligibility;
+  score: number;
+  explanation: string;
+  relevantCapabilities: string[];
+  missingInformation: string[];
+  requirements: FundingRequirement[];
+}
+
+export interface FundingOpportunity {
+  id: string;
+  sourceId: string;
+  title: string;
+  funder: string;
+  program: string;
+  category: FundingCategory;
+  researchAreas: string[];
+  summary: string;
+  amountMin: number | null;
+  amountMax: number | null;
+  amountText: string;
+  currency: 'USD';
+  deadline: string | null;
+  deadlineText: string;
+  status: 'open' | 'rolling' | 'closing_soon' | 'closed' | 'watching';
+  geography: 'US';
+  careerStages: string[];
+  institutionTypes: string[];
+  requiredPartners: string[];
+  commercializationStages: string[];
+  sourceUrl: string;
+  detailUrl: string;
+  observedAt: string;
+  changedAt: string | null;
+  sourceHealth: 'healthy' | 'warning' | 'draft';
+  match: FundingMatch;
+  evidence: EvidencePassage[];
+  tasks: Array<{ id: string; title: string; dueAt: string | null; status: 'todo' | 'done' }>;
+  provenance: 'recorded_demo' | 'bright_data_live';
+}
+
+export interface LabProfile {
+  name: string;
+  institution: string;
+  country: 'US';
+  researchAreas: string[];
+  methods: string[];
+  careerStages: string[];
+  equipment: string[];
+  previousWork: string[];
+  desiredFundingMin: number | null;
+  desiredFundingMax: number | null;
+  collaborationPreferences: string[];
+  commercializationStage: string;
+  updatedAt: string;
+}
+
+export interface FundingSource {
+  id: string;
+  name: string;
+  organization: string;
+  category: FundingCategory;
+  sourceUrl: string;
+  inputUrl: string;
+  collectorId: string | null;
+  status: 'active' | 'warning' | 'draft';
+  requiredFields: string[];
+  lastRunAt: string | null;
+  lastRunStatus: 'healthy' | 'degraded' | 'pending' | null;
+  recordCount: number;
+  schedule: string;
+  collectionMethod: 'bright_data';
+}
+
+export interface FundingEvent {
+  id: string;
+  type: 'opportunity_added' | 'deadline_changed' | 'requirements_changed' | 'source_run' | 'source_warning';
+  title: string;
+  body: string;
+  opportunityId: string | null;
+  sourceId: string | null;
+  createdAt: string;
 }

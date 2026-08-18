@@ -5,8 +5,8 @@ import { buildCopilotContext } from '../../src/lib/ai/context';
 import { adapterFor } from '../../src/lib/sources';
 import { assertPublicHttpUrl } from '../../src/lib/security';
 import { opportunities, sources } from '../../src/data/demo';
-import { liveSources } from '../../src/data/live-sources';
-import { publicScraperParsers } from '../../src/lib/public-scrapers';
+import { normalizeFundingRows } from '../../src/lib/funding-ingestion';
+import { fundingSources } from '../../src/data/funding-demo';
 
 describe('normalization',()=>{
   it('normalizes conservatively',()=>{expect(normalizeStatus('Open Tender')).toBe('open');expect(normalizeStatus('mystery')).toBe('unknown');expect(normalizeProcedure('RFP')).toBe('request_for_proposal');});
@@ -25,49 +25,20 @@ describe('open-ended sources',()=>{
 });
 describe('copilot grounding',()=>it('contains evidence and explicit missing-data rules',()=>{const context=buildCopilotContext(opportunities[0]);expect(context.evidence.length).toBeGreaterThan(0);expect(context.rules.join(' ')).toContain('absent');}));
 describe('source URL security',()=>it('blocks private targets',()=>{expect(()=>assertPublicHttpUrl('http://127.0.0.1/admin')).toThrow(/Private/);expect(assertPublicHttpUrl('https://example.gov/tenders').hostname).toBe('example.gov');}));
-describe('public source parsers',()=>{
-  it('maps CanadaBuys open-tender CSV without contact fields',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='canada-canadabuys')!;
-    const csv='title-titre-eng,solicitationNumber-numeroSollicitation,referenceNumber-numeroReference,contractingEntityName-nomEntitContractante-eng,tenderStatus-appelOffresStatut-eng,publicationDate-datePublication,tenderClosingDate-appelOffresDateCloture,noticeURL-URLavis-eng\n"Road services","CA-1","cb-1","Public Works","Open","2026/08/17","2026/09/01",""';
-    expect(publicScraperParsers.canadaBuysRows(csv,source)[0]).toMatchObject({title:'Road services',solicitation_id:'CA-1',organization:'Public Works',detail_url:'https://canadabuys.canada.ca/en/tender-opportunities/tender-notice/cb-1'});
-  });
-  it('does not return expired public-source rows',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='canada-canadabuys')!;
-    const csv='title-titre-eng,solicitationNumber-numeroSollicitation,referenceNumber-numeroReference,contractingEntityName-nomEntitContractante-eng,tenderStatus-appelOffresStatut-eng,publicationDate-datePublication,tenderClosingDate-appelOffresDateCloture,noticeURL-URLavis-eng\n"Expired road services","CA-OLD","cb-old","Public Works","Open","2020/01/01","2020/02/01",""';
-    expect(publicScraperParsers.canadaBuysRows(csv,source)).toHaveLength(0);
-  });
-  it('maps Chicago solicitation table rows',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='us-chicago-solicitations')!;
-    const html='<table><tbody><tr><td>CITY</td><td>RFP</td><td>CHI-1</td><td>Technology services</td><td>Open</td><td>08/17/2026</td><td>09/01/2026</td><td><a href="/vcsearch/solicitations/1">View</a></td></tr></tbody></table>';
-    expect(publicScraperParsers.chicagoRows(html,source)[0]).toMatchObject({title:'Technology services',solicitation_id:'CHI-1',organization:'City of Chicago'});
-  });
-  it('maps official US open-data API rows without contact data',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='us-nyc-current-bids')!;
-    const input=JSON.stringify([{request_id:'20260818001',short_title:'Transit engineering services',agency_name:'Transportation',type_of_notice_description:'Solicitation',selection_method_description:'Competitive Sealed Proposals',start_date:'2026-08-18T00:00:00.000',due_date:'2026-09-18T12:00:00.000',contact_name:'Private field not collected'}]);
-    const row=publicScraperParsers.nycRows(input,source)[0];
-    expect(row).toMatchObject({title:'Transit engineering services',solicitation_id:'20260818001',organization:'Transportation',status_raw:'Open'});
-    expect(row).not.toHaveProperty('contact_name');
-  });
-  it('maps Québec SEAO OCDS releases',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='canada-quebec-seao')!;
-    const input=JSON.stringify({releases:[{ocid:'ocds-qc-1',date:'2026-08-18T12:00:00-04:00',buyer:{name:'Ville de Québec'},tender:{id:'QC-1',title:'Services professionnels',status:'active',procurementMethodDetails:'Avis d’appel d’offres',tenderPeriod:{endDate:'2026-09-18T15:00:00-04:00'},documents:[{url:'https://seao.gouv.qc.ca/avis/1'}]}}]});
-    expect(publicScraperParsers.quebecSeaoRows(input,source)[0]).toMatchObject({title:'Services professionnels',solicitation_id:'QC-1',organization:'Ville de Québec',status_raw:'Open'});
-  });
-  it('deduplicates Texas DOT bid items by project',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='us-texas-dot-bids')!;
-    const input=JSON.stringify([{project_id:'TX-1',project_number:'STP-1',project_classification:'Safety Improvements',highway:'US 54',county:'El Paso',proposal_status:'Official',bid_type_description:'Low Bid',proposal_published_date:'2026-08-18T09:00:00.000',bid_recieved_until_date_and:'2026-09-18T13:00:00.000'},{project_id:'TX-1',project_number:'STP-1'}]);
-    const rows=publicScraperParsers.texasDotRows(input,source);
+describe('Bright Data funding normalization',()=>{
+  it('publishes only rows with a title and official detail URL',()=>{
+    const source=fundingSources[0];
+    const rows=normalizeFundingRows(source,[
+      {title:'Biomedical innovation award',detail_url:'https://example.org/funding/1',deadline:'2027-02-01',eligibility:'US research institutes may apply',amount:'$750,000',external_id:'F-1'},
+      {title:'Incomplete record without a source URL'},
+    ],'2026-08-18T16:30:00.000Z');
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({title:'Safety Improvements · US 54 · El Paso County',solicitation_id:'TX-1',organization:'Texas Department of Transportation'});
+    expect(rows[0]).toMatchObject({title:'Biomedical innovation award',amountMin:750000,provenance:'bright_data_live',geography:'US'});
+    expect(rows[0]?.match.eligibility).toBe('insufficient_evidence');
+    expect(rows[0]?.evidence.map((item)=>item.field)).toEqual(['title','deadline','eligibility']);
   });
-  it('maps Los Angeles RAMP open bids',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='us-los-angeles-ramp')!;
-    const input=JSON.stringify([{title:'Fleet maintenance',rampid:'LA-1',department:'General Services',stagename:'Open',type:'RFP',bidpost:'2026-08-18T10:00:00.000',closedate:'2026-09-18T18:00:00.000',url:{url:'https://www.rampla.org/opportunities/LA-1'}}]);
-    expect(publicScraperParsers.losAngelesRows(input,source)[0]).toMatchObject({title:'Fleet maintenance',solicitation_id:'LA-1',organization:'General Services',status_raw:'Open'});
-  });
-  it('maps multilingual TED notices and keeps the latest open lot deadline',()=>{
-    const source=liveSources.find(candidate=>candidate.slug==='eu-ted-open-notices')!;
-    const rows=publicScraperParsers.tedRows([{'publication-number':'123-2026','notice-title':{eng:'Rail engineering services'},'buyer-name':{eng:['European Rail Agency']},'form-type':'competition','publication-date':'2026-08-18Z','deadline-receipt-tender-date-lot':['2026-08-01+02:00','2027-01-10+01:00']}],source);
-    expect(rows[0]).toMatchObject({title:'Rail engineering services',solicitation_id:'123-2026',organization:'European Rail Agency',closing_date_raw:'2027-01-10T23:59:59+01:00'});
+  it('closes a collected record whose deadline has passed',()=>{
+    const rows=normalizeFundingRows(fundingSources[0],[{title:'Expired award',detail_url:'https://example.org/funding/expired',deadline:'2020-01-01'}]);
+    expect(rows[0]?.status).toBe('closed');
   });
 });

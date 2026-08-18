@@ -117,7 +117,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T04:00:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_html",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000009",
@@ -140,7 +140,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T15:15:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_api",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000010",
@@ -163,7 +163,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T16:20:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_api",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000011",
@@ -186,7 +186,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T16:20:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_api",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000012",
@@ -209,7 +209,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T16:20:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_api",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000013",
@@ -255,7 +255,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T04:00:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_html",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000006",
@@ -278,7 +278,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T04:45:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_html",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000007",
@@ -301,7 +301,7 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T04:48:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_html",
+    collectionMethod: "bright_data",
   },
   {
     id: "21000000-0000-4000-8000-000000000008",
@@ -324,6 +324,6 @@ export const liveSources: SourceConfig[] = [
     publicAccessVerifiedAt: "2026-08-18T04:50:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
-    collectionMethod: "public_html",
+    collectionMethod: "bright_data",
   },
 ];

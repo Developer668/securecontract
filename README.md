@@ -1,102 +1,45 @@
-# SecureContract
+# FundingSecured
 
-> Public opportunities change. Your data should not break.
+Funding discovery and application planning for early-stage US biomedical labs and research-driven startups that do not have a dedicated grant administrator.
 
-SecureContract is a self-healing, evidence-grounded public-procurement intelligence product. It is designed to turn structurally different public portals into one canonical opportunity stream while preserving what the government site and scraper actually said.
+FundingSecured combines a responsive evidence-first dashboard, a portfolio-wide NVIDIA NIM funding guide, a live change feed, and a Bright Data-only collection plane. It is deliberately conservative: a missing eligibility passage remains missing, an expired deadline closes automatically, and every consequential recommendation links back to retained source evidence.
 
-The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay currently contains 42,150 opportunities, including 42,140 open listings as of 2026-08-18, 1,565 Canadian listings, 938 US listings, 54 Australian listings, and 39,593 notices from the European Union's official TED API. A hard 99,000-record ceiling prevents unbounded browser and replay growth. Live collection through the product and live NVIDIA NIM inference are both verified.
+## What the product does
 
-## Why this exists
+- Ranks US biomedical funding by research, institution, team stage, equipment, funding range, collaboration preference, and commercialization stage.
+- Uses four bounded eligibility states: `verified_eligible`, `likely_confirmation_required`, `insufficient_evidence`, and `not_eligible`.
+- Shows score explanations, amounts, deadlines, required partners, relevant capabilities, missing information, exact source passages, and application tasks.
+- Provides a central natural-language query box and a dedicated ChatGPT-style Funding Guide.
+- Streams collection and change events through server-sent events.
+- Re-evaluates deadlines on every read and closes expired opportunities without model judgment.
+- Connects and runs only real Bright Data Collector IDs. There is no direct HTML/API scraper fallback.
+- Preserves the last accepted records when a Collector returns zero complete rows.
 
-Procurement portals vary by jurisdiction, terminology, dates, pagination, and access behavior. A scraper failure can look like a real business event: zero rows may be mistaken for every contract closing. SecureContract creates a reliability boundary that archives raw rows, validates a run before publication, normalizes additively, stores field-level provenance, versions material changes, and preserves the last known-good state when extraction becomes unreliable.
+The checked-in opportunity set is a labeled product demonstration. It is not represented as live Bright Data output. Connect verified Collector IDs in the **Collectors** view to publish live records.
 
-```text
-Government portals and official open-data feeds
-   ↓ Bright Data collectors or registered public-source adapters
-   ↓
-Raw immutable data
-   ↓
-Validation
-   ↓
-Normalization + evidence
-   ↓
-SecureContract
-   ├── Opportunity discovery
-   ├── Change intelligence
-   ├── Application workspace
-   └── NVIDIA NIM copilot
-```
-
-## Product surfaces
-
-- **Discover** — searchable canonical feed with dynamic country and source choices.
-- **Opportunity detail** — Overview, Evidence, Changes, Raw, Workspace, and Copilot views.
-- **Operations** — one-click collector runs, current validation, compact integration readiness, and an expandable self-healing ledger.
-- **Workspace** — preparation status, tasks, notes persistence, and explicit readiness boundaries.
-- **Copilot** — a dedicated NVIDIA NIM studio scoped to the selected opportunity's collected evidence.
-
-The frontend never hardcodes a country union or routes by country. A `SourceConfig.adapterKey` selects a source adapter. The unit suite proves an arbitrary Brazil source flows through the same model without UI changes.
-
-## Raw → canonical → evidence
+## Architecture
 
 ```text
-PUBLIC WEBSITE
-  ↓ Bright Data custom collector
-RAW      closing_date_raw = "26-Aug-2026 17:00"
-  ↓ source adapter + configured timezone
-CANONICAL submissionDueAt = "2026-08-26T17:00:00+05:30"
-  ↓
-EVIDENCE  rawLabel + rawValue + normalizedValue + sourceUrl + observedAt
-  ↓
-PRODUCT   deadline + change alert + application task + grounded copilot context
+US biomedical funding pages
+        ↓
+Bright Data Collectors only
+        ↓
+raw dataset → quality gate → canonical opportunity + exact passages
+        ↓
+FundingSecured API
+   ├── discovery and live events
+   ├── lab profile and tasks
+   ├── evidence-bounded NVIDIA NIM guide
+   └── Collector operations and healing workflow
+        ↓
+responsive React interface
 ```
 
-Raw records are append-only in the database model. Volatile observation metadata is excluded from canonical hashes. Critical changes such as submission deadlines, mandatory meetings, cancellations, and eligibility restrictions cannot disappear into an overwrite.
-
-## Reliability behavior
-
-Run validation covers zero rows, volume collapse, required-field completeness, date parse rate, duplicate rate, schema drift, access-wall detection, and freshness. Health is deterministic: 30% completeness, 25% date parsing, 20% volume stability, 15% schema stability, and 10% freshness.
-
-Discover defaults to open opportunities. Public-source scrapers discard rows whose source status is not open or whose parsed submission deadline has passed. Previously collected records are retained for evidence, but their canonical status automatically becomes `closed` once the deadline passes and the transition appears in the change history.
-
-When a run is rejected, SecureContract does not replace accepted opportunities or infer that missing rows are closed. The UI explicitly displays `LAST KNOWN GOOD` and the reason the latest source run is degraded.
-
-## Bright Data Scraper Studio
-
-`BrightDataClient` implements the current official flow:
-
-1. `POST /dca/trigger?collector=c_…&queue_next=1`
-2. persist the returned `collection_id` as the run/snapshot identifier;
-3. poll `GET /dca/dataset?id=j_…` with bounded exponential backoff;
-4. archive rows before validation and normalization.
-
-The Bright Data token is never sent to the browser. A user can run every configured source from Operations without a second login; the same-origin server performs the collection and keeps provider credentials private. Cron remains protected by `CRON_SECRET`. Source URLs are restricted to public HTTP(S) targets and reject embedded credentials, localhost, and private-network IPs.
-
-CanadaBuys, Québec SEAO, EU TED, Texas DOT, Los Angeles RAMP, New York City, Montgomery County, San Francisco, and Chicago use official anonymous CSV, JSON, OCDS, or HTML endpoints because Scraper Studio rejected or failed generation for several government domains. TED uses the official 250-notice iteration cursor to collect the complete current open result set while the application enforces its 99,000-record ceiling. These sources still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline. Chicago's live page is currently unavailable, so its source is warning-only and its last accepted rows are preserved rather than represented as freshly collected.
-
-Current proof status is documented in [docs/bright-data-proof.md](docs/bright-data-proof.md). No Collector ID is fabricated. The self-healing evidence protocol is in [docs/healing-proof.md](docs/healing-proof.md).
-
-## NVIDIA NIM copilot
-
-SecureContract Copilot is an interpretation studio inside an opportunity, not a generic chatbot. The server sends a minimal context pack containing canonical fields, field evidence, source health, changes, and optional user-provided vendor facts. Its rules require explicit missing-data language and canonical evidence references. Unsupported citations are removed at the server boundary. It cannot claim legal eligibility, guarantee compliance, predict win probability, invent certifications, or submit a bid.
-
-Production returns `NVIDIA NIM not configured` when the key/model is absent. Tests mock only network transport; production never returns a fake AI answer. See [docs/nvidia-nim.md](docs/nvidia-nim.md).
-
-## Database
-
-The Drizzle PostgreSQL schema in `db/schema.ts` includes:
-
-```text
-sources · source_runs · raw_records
-opportunities · opportunity_versions · opportunity_changes · field_evidence
-documents · amendments
-vendor_profiles · application_workspaces · application_tasks
-copilot_threads · copilot_messages
-```
+The server retains both provider secrets. Browser code receives neither the Bright Data token nor the NVIDIA key. NIM output is parsed as structured JSON, and cited evidence/opportunity IDs are allow-listed against the context supplied to the model.
 
 ## Local setup
 
-Requirements: Node 20+ and pnpm.
+Requirements: Node.js 20+ and pnpm.
 
 ```bash
 pnpm install
@@ -104,22 +47,30 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open `http://localhost:5173`. The API runs on `http://localhost:8787` and Vite proxies `/api` during development.
-
-Optional live configuration:
+Open `http://localhost:5173`. The API listens at `http://localhost:8787` and Vite proxies `/api` during development.
 
 ```env
-DATABASE_URL=
 BRIGHT_DATA_API_TOKEN=
+BRIGHT_DATA_CREDENTIALS_PATH=
 NVIDIA_API_KEY=
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_NIM_MODEL=
+NVIDIA_NIM_MODEL=meta/llama-3.1-8b-instruct
+DATABASE_URL=
 CRON_SECRET=
-BRIGHT_DATA_CREDENTIALS_PATH=
-DEMO_MODE=recorded-live
 ```
 
-Never put these values in client-prefixed environment variables. The checked-in `.env.example` contains names only.
+The existing server-side NVIDIA NIM environment variables are reused. Never expose either provider key through a client-prefixed variable.
+
+## Bright Data workflow
+
+1. Create and validate a funding-page scraper in Bright Data Scraper Studio.
+2. Open **Collectors** and connect the returned `c_…` Collector ID to its source.
+3. Run it from the product. The server triggers the Collector and polls the returned collection ID.
+4. FundingSecured normalizes only rows containing a title and official detail URL.
+5. Zero complete rows fail the gate and preserve last-known-good data.
+6. For the healing demo, review a missing-field extraction proposal in Bright Data, approve it, and rerun the same Collector ID.
+
+No Collector IDs are fabricated in the demonstration state.
 
 ## Commands
 
@@ -129,59 +80,25 @@ pnpm typecheck
 pnpm test
 pnpm test:e2e
 pnpm build
-pnpm replay:build
 pnpm verify:nim
 
-pnpm tsx scripts/onboard-source.ts https://public.example.gov/tenders
-pnpm tsx scripts/collect-source.ts c_collector https://public.example.gov/tenders
-pnpm tsx scripts/validate-source.ts run-metrics.json
+pnpm scraper:run c_collector https://example.org/funding
 ```
-
-Build the evidence replay with `pnpm replay:build`. It preserves artifact-level provenance: completed dataset runs, approved extraction previews, and rejected runs remain distinct.
-
-In **Operations**, click **Run all live sources**. In Discover, **Find more opportunities** refreshes every active official public source without requiring a second login. SecureContract publishes only after each run passes validation. AAI is an auxiliary publication index and is deliberately archived without being published as a contract opportunity.
 
 ## Project map
 
 ```text
-src/App.tsx                 product UI and workflows
-src/data/demo.ts            explicitly labeled demonstration fixtures
-src/lib/bright-data/        live trigger/retrieval client
-src/lib/sources/            source adapter interface and registry
-src/lib/validation.ts       deterministic run acceptance
-src/lib/normalization.ts    status/procedure/hash/diff behavior
-src/lib/ai/                 grounded context and NVIDIA provider
-server/index.ts             server API and one-click collection orchestration
-db/schema.ts                PostgreSQL + Drizzle tables
-tests/                      unit, integration, and browser E2E
-docs/                       architecture and proof ledgers
+src/App.tsx                         product UI and workflows
+src/styles.css                     responsive high-end visual system
+src/data/funding-demo.ts           labeled US biomedical demo portfolio
+src/lib/funding-ingestion.ts       Bright Data funding normalization
+src/lib/bright-data/               Collector trigger and dataset client
+src/lib/ai/funding-provider.ts     evidence-bounded NVIDIA NIM guide
+server/index.ts                     API, SSE, Collector orchestration
+tests/                              unit, integration, and browser checks
+docs/fundingsecured-system-design/ generated system-design artifact
 ```
-
-## Deployment
-
-Build the static client with `pnpm build` and run the server in a Node environment with its secrets configured. Provision PostgreSQL and apply the Drizzle schema before enabling persistence-backed live mode. Set `APP_URL` and `CRON_SECRET` as GitHub repository secrets for `.github/workflows/collect.yml`. Collection frequency is deliberately conservative (every 12 hours).
-
-Do not deploy demonstration or preview-replay mode as a live-data claim. A production release gate must require accepted per-opportunity dataset runs, sanitized recorded-live output, a completed healing ledger, and a live NIM inference.
-
-## Hackathon documentation
-
-- [Architecture](docs/architecture.md)
-- [Source selection](docs/source-selection.md)
-- [Bright Data proof ledger](docs/bright-data-proof.md)
-- [Healing proof ledger](docs/healing-proof.md)
-- [NVIDIA NIM integration](docs/nvidia-nim.md)
-- [Demo script](docs/demo-script.md)
-- [Release readiness ledger](docs/release-readiness.md)
-- [Generated product design spec](docs/design/securecontract-concept.png)
-- [Latest desktop implementation](docs/design/implementation-desktop.png)
-- [Safari verification with completed live data](docs/design/implementation-desktop-live.jpeg)
-- [Safari verification with live NVIDIA NIM](docs/design/nvidia-nim-live.jpeg)
-- [Latest mobile implementation](docs/design/implementation-mobile.png)
-
-## AI-development disclosure
-
-OpenAI Codex was used extensively as a development agent during the hackathon. The participant reviewed, tested and verified the resulting implementation, scraper behavior and architectural decisions.
 
 ## Safety boundary
 
-SecureContract only targets public procurement information. It does not collect bidder personal data, authenticate to restricted portals, bypass access controls, accept legal terms, sign agreements, or submit bids automatically.
+FundingSecured is decision support, not an eligibility authority. It does not invent requirements, guarantee eligibility, submit applications, bypass access controls, or scrape through any path other than configured Bright Data Collectors. Users must verify the linked official notice before acting.
