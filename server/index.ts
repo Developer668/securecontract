@@ -237,9 +237,10 @@ const publishNormalized=(source:FundingSource,items:FundingOpportunity[])=>{
   source.recordCount=unique.size;persistFunding();return unique.size;
 };
 
-const fundingModel=()=>process.env.FUNDING_NIM_FAST_MODEL ?? process.env.FUNDING_NIM_MODEL ?? 'minimaxai/minimax-m3';
+const fundingModel=()=>process.env.FUNDING_NIM_FAST_MODEL ?? process.env.FUNDING_NIM_MODEL ?? process.env.NVIDIA_NIM_MODEL ?? 'meta/llama-3.1-8b-instruct';
 const scoringModel=()=>process.env.FUNDING_EMBEDDING_MODEL ?? 'nvidia/llama-nemotron-embed-1b-v2';
 const fundingRetrievalCache=new Map<string,{expiresAt:number;ids:string[]}>();
+const fundingAnswerCache=new Map<string,{expiresAt:number;body:unknown}>();
 const retrieveFunding=(question:string,all:FundingOpportunity[])=>{
   const key=question.trim().toLowerCase();const cached=fundingRetrievalCache.get(key);
   if(cached&&cached.expiresAt>Date.now())return all.filter((item)=>cached.ids.includes(item.id));
@@ -895,16 +896,19 @@ app.post("/api/funding/chat", async (request, response) => {
   const selected = parsed.data.opportunityIds.length
     ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
     : retrieveFunding(parsed.data.question,all);
+  const answerKey=`${labProfile.updatedAt}:${parsed.data.question.trim().toLowerCase()}:${selected.map((item)=>item.id).join(',')}`;
+  const cachedAnswer=fundingAnswerCache.get(answerKey);
+  if(cachedAnswer&&cachedAnswer.expiresAt>Date.now())return response.json(cachedAnswer.body);
   try {
     const provider = new FundingNimProvider({
       apiKey: process.env.NVIDIA_API_KEY,
       baseUrl: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
       model: fundingModel(),
     });
-    response.json({...await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected }),model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length});
+    const generated=await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected });const strongest=selected.slice(0,3);const fallbackAnswer=`I searched ${all.length} saved funding records and read the ${selected.length} most relevant open grants against the saved lab profile. Start with ${strongest.map((item)=>`${item.title} from ${item.funder}`).join('; ')}. These are the strongest record-level matches, but eligibility, award amount, and the live deadline still need confirmation from each official source linked below.`;const body={...generated,answer:generated.answer.trim().length<180?fallbackAnswer:generated.answer,opportunityIds:generated.answer.trim().length<180?strongest.map((item)=>item.id):generated.opportunityIds,model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length};fundingAnswerCache.set(answerKey,{expiresAt:Date.now()+10*60_000,body});response.json(body);
   } catch (error) {
     const recommended=selected.slice(0,3);const answer=recommended.length?`Based on the saved lab profile and the strongest retrieved records, start with:\n\n${recommended.map((item,index)=>`${index+1}. ${item.title} — ${item.funder}. ${item.match.explanation} Verify ${item.match.missingInformation.slice(0,2).join(' and ').toLowerCase()||'the official applicant conditions'} before applying.`).join('\n\n')}\n\nThese are discovery recommendations, not verified eligibility decisions. Open the linked official records before committing application effort.`:'No retained grant record is strong enough to recommend yet.';
-    response.json({answer,evidenceIds:recommended.flatMap((item)=>item.evidence.slice(0,2).map((entry)=>entry.id)),opportunityIds:recommended.map((item)=>item.id),followUpQuestions:['Which grant should I turn into an application checklist?'],draft:true,model:'evidence-safe fallback',recordsSearched:all.length,recordsRead:selected.length,warning:error instanceof Error?error.message:'Funding model temporarily unavailable'});
+    const body={answer,evidenceIds:recommended.flatMap((item)=>item.evidence.slice(0,2).map((entry)=>entry.id)),opportunityIds:recommended.map((item)=>item.id),followUpQuestions:['Which grant should I turn into an application checklist?'],draft:true,model:'evidence-safe fallback',recordsSearched:all.length,recordsRead:selected.length,warning:error instanceof Error?error.message:'Funding model temporarily unavailable'};fundingAnswerCache.set(answerKey,{expiresAt:Date.now()+10*60_000,body});response.json(body);
   }
 });
 app.listen(port, () =>

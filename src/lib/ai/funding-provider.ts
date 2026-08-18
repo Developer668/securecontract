@@ -25,7 +25,14 @@ When the evidence is absent, explicitly say what is missing and which official s
 Answer conversationally and directly. Name the grants you recommend, explain why each could fit, state important uncertainty, and compare tradeoffs when useful.
 For every consequential claim, cite only an evidence id present in the context. Return only JSON with answer, evidenceIds, opportunityIds, and followUpQuestions.`;
 
-const parseJson = (content:string) => JSON.parse(content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) as unknown;
+const parseJson = (content:string) => {
+  const cleaned=content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try{return JSON.parse(cleaned) as unknown;}catch{
+    const start=cleaned.indexOf('{');let depth=0;let quoted=false;let escaped=false;
+    for(let index=start;index<cleaned.length;index++) {const char=cleaned[index];if(quoted){if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char==='"')quoted=false;continue;}if(char==='"'){quoted=true;continue;}if(char==='{')depth++;if(char==='}'&&--depth===0)return JSON.parse(cleaned.slice(start,index+1)) as unknown;}
+    throw new Error('NVIDIA NIM returned malformed JSON');
+  }
+};
 
 export class FundingNimProvider {
   constructor(
