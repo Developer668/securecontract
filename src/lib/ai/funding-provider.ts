@@ -70,7 +70,7 @@ export class FundingNimProvider {
         Authorization: `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(25_000),
       body: JSON.stringify({
         model: this.config.model,
         temperature: 0.05,

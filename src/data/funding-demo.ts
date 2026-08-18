@@ -6,7 +6,7 @@ const seeds: SourceSeed[] = [
   {id:'src-nih',name:'NIH Active Opportunities',organization:'National Institutes of Health',category:'federal',sourceUrl:'https://grants.nih.gov/funding/explore-nih-opportunities?type=active'},
   {id:'src-nsf',name:'NSF Funding Opportunities',organization:'U.S. National Science Foundation',category:'federal',sourceUrl:'https://www.nsf.gov/funding/opportunities'},
   {id:'src-arpa-h',name:'ARPA-H Open Funding',organization:'Advanced Research Projects Agency for Health',category:'federal',sourceUrl:'https://arpa-h.gov/explore-funding/open-funding-opportunities'},
-  {id:'src-pcori',name:'PCORI Funding Opportunities',organization:'Patient-Centered Outcomes Research Institute',category:'foundation',sourceUrl:'https://www.pcori.org/funding-opportunities'},
+  {id:'src-pcori',name:'PCORI Funding Opportunities',organization:'Patient-Centered Outcomes Research Institute',category:'foundation',sourceUrl:'https://www.pcori.org/funding-opportunities',collectorId:'c_msz1gyxybxtte9k9a'},
   {id:'src-czi',name:'CZI Science RFAs',organization:'Chan Zuckerberg Initiative',category:'foundation',sourceUrl:'https://chanzuckerberg.com/rfa/'},
   {id:'src-bwf',name:'BWF Funding Opportunities',organization:'Burroughs Wellcome Fund',category:'foundation',sourceUrl:'https://www.bwfund.org/funding-opportunities/'},
   {id:'src-simons',name:'Simons Foundation Funding',organization:'Simons Foundation',category:'foundation',sourceUrl:'https://www.simonsfoundation.org/funding-opportunities/'},

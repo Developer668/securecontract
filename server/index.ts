@@ -237,8 +237,16 @@ const publishNormalized=(source:FundingSource,items:FundingOpportunity[])=>{
   source.recordCount=unique.size;persistFunding();return unique.size;
 };
 
-const fundingModel=()=>process.env.FUNDING_NIM_MODEL ?? 'minimaxai/minimax-m3';
+const fundingModel=()=>process.env.FUNDING_NIM_FAST_MODEL ?? process.env.FUNDING_NIM_MODEL ?? 'minimaxai/minimax-m3';
 const scoringModel=()=>process.env.FUNDING_EMBEDDING_MODEL ?? 'nvidia/llama-nemotron-embed-1b-v2';
+const fundingRetrievalCache=new Map<string,{expiresAt:number;ids:string[]}>();
+const retrieveFunding=(question:string,all:FundingOpportunity[])=>{
+  const key=question.trim().toLowerCase();const cached=fundingRetrievalCache.get(key);
+  if(cached&&cached.expiresAt>Date.now())return all.filter((item)=>cached.ids.includes(item.id));
+  const questionTokens=new Set(key.split(/[^a-z0-9]+/).filter((token)=>token.length>3));
+  const selected=all.filter((item)=>item.status!=='closed').map((item)=>{const record=[item.title,item.funder,item.summary,...item.researchAreas,...item.commercializationStages,...item.evidence.map((entry)=>`${entry.field} ${entry.passage}`)].join(' ').toLowerCase();let score=item.match.score/20;for(const token of questionTokens)if(record.includes(token))score+=4;return {item,score};}).sort((a,b)=>b.score-a.score).slice(0,8).map(({item})=>item);
+  fundingRetrievalCache.set(key,{expiresAt:Date.now()+5*60_000,ids:selected.map((item)=>item.id)});return selected;
+};
 const scoreFundingPortfolio=async()=>{
   if(!labProfile||!process.env.NVIDIA_API_KEY)return;
   const profile=structuredClone(labProfile);const items=[...fundingOpportunityStore.values()];
@@ -801,7 +809,7 @@ app.post("/api/funding/runs", async (_request, response) => {
     }
   }
   const searchRuns = triggered.filter((run)=>run.collectionId.startsWith('search_'));
-  void (async()=>{for(const run of searchRuns)await runFundingSearch(run.collectionId)})();
+  void Promise.all(searchRuns.map((run)=>runFundingSearch(run.collectionId)));
   publishFundingEvent({id:randomUUID(),type:"source_run",title:`Started ${triggered.length} Bright Data source runs`,body:"Each accepted dataset will publish independently after its quality gate.",opportunityId:null,sourceId:null,createdAt:new Date().toISOString()});
   response.status(202).json({triggered,skipped:fundingSourceStore.size-triggered.length});
 });
@@ -881,25 +889,19 @@ app.post("/api/funding/chat", async (request, response) => {
   if (!parsed.success) return response.status(400).json({ error: "A valid funding question is required" });
   if (!labProfile) return response.status(409).json({ error:"Complete the lab profile before asking for matches" });
   if (scoringState.status==='processing') return response.status(409).json({error:`Still reading grant JSON (${scoringState.completed}/${scoringState.total}). Try again when analysis finishes.`,code:'SCORING_IN_PROGRESS'});
-  if (!process.env.NVIDIA_API_KEY || !process.env.NVIDIA_NIM_MODEL)
+  if (!process.env.NVIDIA_API_KEY)
     return response.status(503).json({ error: "NVIDIA NIM not configured", code: "NIM_NOT_CONFIGURED" });
   const all = [...fundingOpportunityStore.values()];
-  const questionTokens=new Set(parsed.data.question.toLowerCase().split(/[^a-z0-9]+/).filter((token)=>token.length>3));
-  const retrievalScore=(item:FundingOpportunity)=>{
-    const record=JSON.stringify({title:item.title,funder:item.funder,summary:item.summary,researchAreas:item.researchAreas,evidence:item.evidence,raw:item.raw??{}}).toLowerCase();
-    let score=item.match.score/20;for(const token of questionTokens)if(record.includes(token))score+=4;return score;
-  };
   const selected = parsed.data.opportunityIds.length
     ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
-    : all.filter((item) => item.status !== "closed").sort((a,b) => retrievalScore(b)-retrievalScore(a)).slice(0, 18);
+    : retrieveFunding(parsed.data.question,all);
   try {
     const provider = new FundingNimProvider({
       apiKey: process.env.NVIDIA_API_KEY,
       baseUrl: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
       model: fundingModel(),
     });
-    const catalog=all.map(({id,title,funder,summary,deadlineText,amountText,status,detailUrl})=>({id,title,funder,summary,deadlineText,amountText,status,detailUrl}));
-    response.json({...await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected,catalog }),model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length});
+    response.json({...await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected }),model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length});
   } catch (error) {
     const recommended=selected.slice(0,3);const answer=recommended.length?`Based on the saved lab profile and the strongest retrieved records, start with:\n\n${recommended.map((item,index)=>`${index+1}. ${item.title} — ${item.funder}. ${item.match.explanation} Verify ${item.match.missingInformation.slice(0,2).join(' and ').toLowerCase()||'the official applicant conditions'} before applying.`).join('\n\n')}\n\nThese are discovery recommendations, not verified eligibility decisions. Open the linked official records before committing application effort.`:'No retained grant record is strong enough to recommend yet.';
     response.json({answer,evidenceIds:recommended.flatMap((item)=>item.evidence.slice(0,2).map((entry)=>entry.id)),opportunityIds:recommended.map((item)=>item.id),followUpQuestions:['Which grant should I turn into an application checklist?'],draft:true,model:'evidence-safe fallback',recordsSearched:all.length,recordsRead:selected.length,warning:error instanceof Error?error.message:'Funding model temporarily unavailable'});
