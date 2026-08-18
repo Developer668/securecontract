@@ -67,6 +67,9 @@ export interface FundingRequirement {
 }
 
 export interface FundingMatch {
+  status?: 'pending' | 'ai_scored' | 'fallback';
+  model?: string | null;
+  scoredAt?: string | null;
   eligibility: FundingEligibility;
   score: number;
   explanation: string;
@@ -105,6 +108,7 @@ export interface FundingOpportunity {
   evidence: EvidencePassage[];
   tasks: Array<{ id: string; title: string; dueAt: string | null; status: 'todo' | 'done' }>;
   provenance: 'recorded_demo' | 'bright_data_live';
+  raw?: Record<string, unknown>;
 }
 
 export interface LabProfile {
@@ -142,7 +146,7 @@ export interface FundingSource {
 
 export interface FundingEvent {
   id: string;
-  type: 'opportunity_added' | 'deadline_changed' | 'requirements_changed' | 'source_run' | 'source_warning';
+  type: 'opportunity_added' | 'deadline_changed' | 'requirements_changed' | 'source_run' | 'source_warning' | 'match_update';
   title: string;
   body: string;
   opportunityId: string | null;

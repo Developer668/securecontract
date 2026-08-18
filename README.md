@@ -6,16 +6,18 @@ FundingSecured combines a responsive evidence-first dashboard, a portfolio-wide 
 
 ## What the product does
 
-- Ranks US biomedical funding by research, institution, team stage, equipment, funding range, collaboration preference, and commercialization stage.
+- Persists the complete collected grant JSON locally and ranks it against research, institution, team stage, equipment, funding range, collaboration preference, and commercialization stage.
 - Uses four bounded eligibility states: `verified_eligible`, `likely_confirmation_required`, `insufficient_evidence`, and `not_eligible`.
 - Shows score explanations, amounts, deadlines, required partners, relevant capabilities, missing information, collected source passages, and application tasks.
-- Provides a central natural-language query box and a dedicated ChatGPT-style Funding Guide.
+- Provides a dedicated conversational Funding Guide that searches the full saved catalog, reads the 18 most relevant complete records, names grants in its answer, and links evidence.
 - Streams collection and change events through server-sent events.
 - Re-evaluates deadlines on every read and closes expired opportunities without model judgment.
-- Runs 24 US biomedical source searches with Bright Data only; richer server-managed Collectors are used where Bright Data permits direct collection.
+- Runs 40 curated US-eligible biomedical sources through three Bright Data discovery queries per source; richer server-managed Collectors remain supported where Bright Data permits direct collection.
+- Canonicalizes URLs and replaces each source's prior result set so repeated runs do not create duplicate cards.
+- Uses NVIDIA's Nemotron embedding model to semantically rescore every retained JSON record after the lab profile changes; scores remain hidden while analysis runs. Minimax M3 handles conversational comparison and explanation.
 - Preserves the last accepted records when a Collector returns zero complete rows.
 
-Discovery begins empty. A user must save a lab profile and run the source portfolio before records or match scores appear.
+Discovery begins empty on a fresh install. Collected JSON, the lab profile, source health, events, and AI scores are then retained in `runtime/fundingsecured-state.json` across restarts. Match scores never appear before a profile exists.
 
 ## Architecture
 
@@ -55,6 +57,9 @@ BRIGHT_DATA_CREDENTIALS_PATH=
 NVIDIA_API_KEY=
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_MODEL=meta/llama-3.1-8b-instruct
+FUNDING_NIM_MODEL=minimaxai/minimax-m3
+FUNDING_EMBEDDING_MODEL=nvidia/llama-nemotron-embed-1b-v2
+FUNDING_STATE_PATH=runtime/fundingsecured-state.json
 DATABASE_URL=
 CRON_SECRET=
 ```
@@ -90,8 +95,10 @@ pnpm scraper:run c_collector https://example.org/funding
 ```text
 src/App.tsx                         product UI and workflows
 src/styles.css                     responsive high-end visual system
-src/data/funding-demo.ts           24-source US biomedical registry
+src/data/funding-demo.ts           40-source US biomedical registry
 src/lib/funding-ingestion.ts       Bright Data funding normalization
+src/lib/funding-persistence.ts     atomic persisted JSON state
+src/lib/funding-matching.ts        conservative fallback and pending states
 src/lib/bright-data/               Collector trigger and dataset client
 src/lib/ai/funding-provider.ts     evidence-bounded NVIDIA NIM guide
 server/index.ts                     API, SSE, Collector orchestration

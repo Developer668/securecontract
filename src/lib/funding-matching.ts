@@ -7,6 +7,7 @@ const tokens = (values: string[]) => new Set(
 export function matchFundingOpportunity(item: FundingOpportunity, profile: LabProfile): FundingMatch {
   if (item.status === 'closed') {
     return {
+      status:'fallback',model:null,scoredAt:new Date().toISOString(),
       eligibility: 'not_eligible',
       score: 0,
       explanation: 'The collected deadline has passed, so this opportunity is closed.',
@@ -36,6 +37,7 @@ export function matchFundingOpportunity(item: FundingOpportunity, profile: LabPr
   ];
   score = Math.max(1, Math.min(96, score));
   return {
+    status:'fallback',model:null,scoredAt:new Date().toISOString(),
     eligibility: eligibilityEvidence ? 'likely_confirmation_required' : 'insufficient_evidence',
     score,
     explanation: eligibilityEvidence
@@ -49,5 +51,14 @@ export function matchFundingOpportunity(item: FundingOpportunity, profile: LabPr
       state:'unknown',
       evidenceId:eligibilityEvidence?.id ?? null,
     }],
+  };
+}
+
+export function pendingFundingMatch(item: FundingOpportunity): FundingMatch {
+  return {
+    status:'pending',model:null,scoredAt:null,
+    eligibility:item.status==='closed'?'not_eligible':'insufficient_evidence',score:0,
+    explanation:'FundingSecured is reading the collected grant JSON against the current lab profile.',
+    relevantCapabilities:[],missingInformation:['AI profile analysis is still running'],requirements:[],
   };
 }

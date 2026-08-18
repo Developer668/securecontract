@@ -27,6 +27,22 @@ const seeds: SourceSeed[] = [
   {id:'src-crohns',name:"Crohn's & Colitis Foundation Grants",organization:"Crohn's & Colitis Foundation",category:'foundation',sourceUrl:'https://www.crohnscolitisfoundation.org/researchers/grants-fellowships'},
   {id:'src-epilepsy',name:'Epilepsy Research Funding',organization:'Epilepsy Foundation',category:'foundation',sourceUrl:'https://www.epilepsy.com/advocacy/priorities/research/funding-opportunities'},
   {id:'src-grand-challenges',name:'Grand Challenges Funding',organization:'Gates Foundation',category:'foundation',sourceUrl:'https://gcgh.grandchallenges.org/challenges'},
+  {id:'src-hhmi',name:'HHMI Science Programs',organization:'Howard Hughes Medical Institute',category:'foundation',sourceUrl:'https://www.hhmi.org/programs'},
+  {id:'src-rita-allen',name:'Rita Allen Foundation Grants',organization:'Rita Allen Foundation',category:'foundation',sourceUrl:'https://ritaallen.org/apply/'},
+  {id:'src-pew-biomedical',name:'Pew Biomedical Programs',organization:'The Pew Charitable Trusts',category:'foundation',sourceUrl:'https://www.pew.org/en/projects/pew-biomedical-scholars'},
+  {id:'src-searle',name:'Searle Scholars Competition',organization:'Searle Scholars Program',category:'foundation',sourceUrl:'https://searlescholars.org/competition/'},
+  {id:'src-beckman',name:'Beckman National Grant Programs',organization:'Arnold and Mabel Beckman Foundation',category:'foundation',sourceUrl:'https://www.beckman-foundation.org/programs/'},
+  {id:'src-mcknight',name:'McKnight Neuroscience Awards',organization:'McKnight Foundation',category:'foundation',sourceUrl:'https://www.mcknight.org/programs/the-mcknight-endowment-fund-for-neuroscience/'},
+  {id:'src-sloan',name:'Sloan Research Fellowships',organization:'Alfred P. Sloan Foundation',category:'foundation',sourceUrl:'https://sloan.org/fellowships'},
+  {id:'src-brf',name:'Brain Research Foundation Grants',organization:'Brain Research Foundation',category:'foundation',sourceUrl:'https://www.thebrf.org/for-researchers/'},
+  {id:'src-keck',name:'Keck Research Grants',organization:'W. M. Keck Foundation',category:'foundation',sourceUrl:'https://www.wmkeck.org/grant-programs/research/'},
+  {id:'src-phrma',name:'PhRMA Foundation Awards',organization:'PhRMA Foundation',category:'foundation',sourceUrl:'https://www.phrmafoundation.org/awards/'},
+  {id:'src-thrasher',name:'Thrasher Pediatric Research Awards',organization:'Thrasher Research Fund',category:'foundation',sourceUrl:'https://www.thrasherresearch.org/early-career-award'},
+  {id:'src-hfsp',name:'HFSP Research Funding',organization:'Human Frontier Science Program',category:'foundation',sourceUrl:'https://www.hfsp.org/funding'},
+  {id:'src-sontag',name:'Sontag Brain Cancer Grants',organization:'The Sontag Foundation',category:'foundation',sourceUrl:'https://sontagfoundation.org/all-grants/'},
+  {id:'src-concern',name:'CONCERN Cancer Research Grants',organization:'Concern Foundation',category:'foundation',sourceUrl:'https://www.concernfoundation.org/research-grants'},
+  {id:'src-cri',name:'Cancer Research Institute Grants',organization:'Cancer Research Institute',category:'foundation',sourceUrl:'https://www.cancerresearch.org/fellowship-grants'},
+  {id:'src-aacr',name:'AACR Research Funding',organization:'American Association for Cancer Research',category:'scientific_society',sourceUrl:'https://www.aacr.org/professionals/research-funding/'},
 ];
 
 export const fundingSources: FundingSource[] = seeds.map((source,index)=>({

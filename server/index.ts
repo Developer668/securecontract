@@ -12,9 +12,11 @@ import { liveSources } from "../src/data/live-sources.js";
 import { BrightDataClient } from "../src/lib/bright-data/client.js";
 import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
 import { FundingNimProvider } from "../src/lib/ai/funding-provider.js";
+import { FundingEmbeddingProvider } from "../src/lib/ai/funding-embeddings.js";
 import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { normalizeFundingRows } from "../src/lib/funding-ingestion.js";
-import { matchFundingOpportunity } from "../src/lib/funding-matching.js";
+import { matchFundingOpportunity, pendingFundingMatch } from "../src/lib/funding-matching.js";
+import { loadFundingState, saveFundingState } from "../src/lib/funding-persistence.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
 import { closeExpiredOpportunity } from "../src/lib/normalization.js";
 import { PostgresRepository } from "../db/repository.js";
@@ -192,16 +194,27 @@ const workspaces = new Map<
     }>;
   }
 >();
+const persistedFundingState=loadFundingState();
+const normalizedFundingTitle=(item:FundingOpportunity)=>`${item.funder}:${item.title}`.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const deduplicatedLoadedOpportunities=new Map<string,FundingOpportunity>();
+for(const item of persistedFundingState?.opportunities??fundingOpportunities){const key=normalizedFundingTitle(item);const saved=deduplicatedLoadedOpportunities.get(key);if(!saved||item.summary.length>saved.summary.length)deduplicatedLoadedOpportunities.set(key,item);}
 const fundingOpportunityStore = new Map<string, FundingOpportunity>(
-  fundingOpportunities.map((item) => [item.id, structuredClone(item)]),
+  [...deduplicatedLoadedOpportunities.values()].map((item) => [item.id, structuredClone(item)]),
 );
 const fundingSourceStore = new Map<string, FundingSource>(
-  fundingSources.map((item) => [item.id, structuredClone(item)]),
+  fundingSources.map((item) => {
+    const saved=persistedFundingState?.sources.find((source)=>source.id===item.id);
+    return [item.id, structuredClone(saved?{...item,status:saved.status,lastRunAt:saved.lastRunAt,lastRunStatus:saved.lastRunStatus,recordCount:saved.recordCount}:item)];
+  }),
 );
-let labProfile: LabProfile | null = null;
-const fundingEvents: FundingEvent[] = structuredClone(initialFundingEvents);
+let labProfile: LabProfile | null = persistedFundingState?.profile ?? null;
+const fundingEvents: FundingEvent[] = structuredClone(persistedFundingState?.events ?? initialFundingEvents);
 const fundingPendingRuns = new Map<string, { sourceId:string; startedAt:string; kind:'collector'|'search'; state:'pending'|'complete'|'failed'; publishedCount?:number; error?:string }>();
 const eventClients = new Set<express.Response>();
+let scoringState:{status:'idle'|'processing'|'ready'|'failed';completed:number;total:number;model:string|null;error:string|null}=labProfile&&fundingOpportunityStore.size&&[...fundingOpportunityStore.values()].every((item)=>item.match.status==='ai_scored')?{status:'ready',completed:fundingOpportunityStore.size,total:fundingOpportunityStore.size,model:[...fundingOpportunityStore.values()][0]?.match.model??null,error:null}:{status:'idle',completed:0,total:fundingOpportunityStore.size,model:null,error:null};
+let scoringTimer:NodeJS.Timeout|undefined;
+
+const persistFunding=()=>saveFundingState({profile:labProfile,opportunities:[...fundingOpportunityStore.values()],sources:[...fundingSourceStore.values()],events:fundingEvents});
 
 const publishFundingEvent = (event: FundingEvent) => {
   fundingEvents.unshift(event);
@@ -210,7 +223,40 @@ const publishFundingEvent = (event: FundingEvent) => {
   for (const client of eventClients) client.write(payload);
 };
 const publishFundingRows = (source:FundingSource, rows:unknown[], observedAt:string) =>
-  normalizeFundingRows(source,rows,observedAt).map((item)=>labProfile?{...item,match:matchFundingOpportunity(item,labProfile)}:item);
+  normalizeFundingRows(source,rows,observedAt).map((item)=>labProfile?{...item,match:pendingFundingMatch(item)}:item);
+
+const canonicalFundingUrl=(value:string)=>{const url=new URL(value);url.hash='';for(const key of [...url.searchParams.keys()])if(/^utm_|^(?:ref|source|campaign)$/i.test(key))url.searchParams.delete(key);return url.toString().replace(/\/$/,'').toLowerCase()};
+const publishNormalized=(source:FundingSource,items:FundingOpportunity[])=>{
+  const unique=new Map<string,FundingOpportunity>();const seenTitles=new Set<string>();for(const item of items){const titleKey=normalizedFundingTitle(item);if(seenTitles.has(titleKey))continue;seenTitles.add(titleKey);unique.set(canonicalFundingUrl(item.detailUrl),item);}
+  for(const [id,item] of fundingOpportunityStore)if(item.sourceId===source.id&&!unique.has(canonicalFundingUrl(item.detailUrl)))fundingOpportunityStore.delete(id);
+  for(const item of unique.values()){
+    const duplicate=[...fundingOpportunityStore.values()].find((saved)=>canonicalFundingUrl(saved.detailUrl)===canonicalFundingUrl(item.detailUrl)||normalizedFundingTitle(saved)===normalizedFundingTitle(item));
+    if(duplicate&&duplicate.id!==item.id){fundingOpportunityStore.set(duplicate.id,{...item,id:duplicate.id,evidence:item.evidence.map((entry)=>({...entry,id:entry.id.replace(item.id,duplicate.id)}))});}
+    else fundingOpportunityStore.set(item.id,item);
+  }
+  source.recordCount=unique.size;persistFunding();return unique.size;
+};
+
+const fundingModel=()=>process.env.FUNDING_NIM_MODEL ?? 'minimaxai/minimax-m3';
+const scoringModel=()=>process.env.FUNDING_EMBEDDING_MODEL ?? 'nvidia/llama-nemotron-embed-1b-v2';
+const scoreFundingPortfolio=async()=>{
+  if(!labProfile||!process.env.NVIDIA_API_KEY)return;
+  const profile=structuredClone(labProfile);const items=[...fundingOpportunityStore.values()];
+  scoringState={status:'processing',completed:0,total:items.length,model:scoringModel(),error:null};
+  for(const item of items)fundingOpportunityStore.set(item.id,{...item,match:pendingFundingMatch(item)});
+  publishFundingEvent({id:randomUUID(),type:'match_update',title:'Reading the grant JSON against your profile',body:`${items.length} unique records are being semantically scored with ${scoringModel()}.`,opportunityId:null,sourceId:null,createdAt:new Date().toISOString()});
+  const provider=new FundingEmbeddingProvider({apiKey:process.env.NVIDIA_API_KEY,baseUrl:process.env.NVIDIA_NIM_BASE_URL??'https://integrate.api.nvidia.com/v1',model:scoringModel()});
+  try{
+    const scores=await provider.score(profile,items);if(!labProfile||labProfile.updatedAt!==profile.updatedAt)return;
+    for(const item of items){const semantic=scores.get(item.id);const fallback=matchFundingOpportunity(item,profile);const eligibilityEvidence=item.evidence.find((entry)=>entry.field==='eligibility');const score=item.status==='closed'?0:semantic?.score??fallback.score;fundingOpportunityStore.set(item.id,{...item,match:{...fallback,status:'ai_scored',model:scoringModel(),scoredAt:new Date().toISOString(),score,eligibility:item.status==='closed'?'not_eligible':eligibilityEvidence?'likely_confirmation_required':'insufficient_evidence',explanation:`Nemotron read the saved grant JSON and found ${score>=70?'strong':score>=45?'moderate':'limited'} semantic alignment (${Math.round((semantic?.similarity??0)*100)}% vector similarity). ${fallback.explanation}`}});}
+    scoringState={...scoringState,completed:items.length};persistFunding();
+    scoringState={...scoringState,status:'ready'};publishFundingEvent({id:randomUUID(),type:'match_update',title:'Profile analysis complete',body:`${items.length} unique grants were scored from their persisted JSON.`,opportunityId:null,sourceId:null,createdAt:new Date().toISOString()});persistFunding();
+  }catch(error){
+    for(const [id,item] of fundingOpportunityStore)if(item.match.status==='pending')fundingOpportunityStore.set(id,{...item,match:matchFundingOpportunity(item,profile)});
+    scoringState={...scoringState,status:'failed',error:error instanceof Error?error.message:'AI scoring failed'};persistFunding();
+  }
+};
+const requestScoring=(delay=8000)=>{if(!labProfile)return;if(scoringTimer)clearTimeout(scoringTimer);scoringTimer=setTimeout(()=>void scoreFundingPortfolio(),delay)};
 
 const runFundingSearch = async (collectionId:string) => {
   const pending = fundingPendingRuns.get(collectionId);
@@ -221,12 +267,10 @@ const runFundingSearch = async (collectionId:string) => {
     const rows = await new BrightDataClient(brightDataToken).searchFundingSite(source.sourceUrl);
     const normalized = publishFundingRows(source,rows,pending.startedAt);
     source.lastRunAt = new Date().toISOString();
-    source.recordCount = normalized.length;
     if (!normalized.length) throw new Error('No complete funding result passed the quality gate');
     source.lastRunStatus = 'healthy';source.status = 'active';
-    for (const item of normalized) fundingOpportunityStore.set(item.id,item);
-    pending.state = 'complete';pending.publishedCount = normalized.length;
-    publishFundingEvent({id:randomUUID(),type:'source_run',title:`${source.name} published ${normalized.length} records`,body:'Bright Data search results passed the funding quality gate.',opportunityId:normalized[0]?.id ?? null,sourceId:source.id,createdAt:new Date().toISOString()});
+    const publishedCount=publishNormalized(source,normalized);pending.state = 'complete';pending.publishedCount = publishedCount;
+    publishFundingEvent({id:randomUUID(),type:'source_run',title:`${source.name} published ${publishedCount} unique records`,body:'Bright Data search results passed relevance and canonical URL deduplication.',opportunityId:normalized[0]?.id ?? null,sourceId:source.id,createdAt:new Date().toISOString()});requestScoring();
   } catch (error) {
     source.lastRunStatus = 'degraded';source.status = 'warning';
     pending.state = 'failed';pending.error = error instanceof Error?error.message:'Bright Data search failed';
@@ -653,7 +697,7 @@ app.get("/api/funding/opportunities", (_request, response) => {
     data,
     provenance: "bright_data_live",
     profileRequired: false,
-    notice: "Every displayed record came from an accepted Bright Data Collector dataset.",
+    notice: "Every displayed record came through Bright Data, passed relevance checks, and was deduplicated by canonical source URL.",
   });
 });
 
@@ -694,10 +738,13 @@ app.put("/api/funding/profile", (request, response) => {
   if (!schema.success) return response.status(400).json({ error: schema.error.flatten() });
   labProfile = { ...schema.data, updatedAt: new Date().toISOString() };
   for (const [id,item] of fundingOpportunityStore) {
-    fundingOpportunityStore.set(id,{...item,match:matchFundingOpportunity(item,labProfile)});
+    fundingOpportunityStore.set(id,{...item,match:pendingFundingMatch(item)});
   }
-  response.json({ data: labProfile });
+  persistFunding();requestScoring(100);
+  response.json({ data: labProfile, scoring:{status:'processing',total:fundingOpportunityStore.size,model:scoringModel()} });
 });
+
+app.get('/api/funding/scoring-status',(_request,response)=>response.json({data:scoringState}));
 
 app.get("/api/funding/sources", (_request, response) => {
   response.json({
@@ -777,7 +824,6 @@ app.get("/api/funding/runs/:collectionId", async (request, response) => {
     if (!Array.isArray(body)) return response.status(202).json(body);
     const normalized = publishFundingRows(source,body,pending.startedAt);
     source.lastRunAt = new Date().toISOString();
-    source.recordCount = normalized.length;
     fundingPendingRuns.delete(collectionId);
     if (!normalized.length) {
       source.lastRunStatus = "degraded";
@@ -787,9 +833,9 @@ app.get("/api/funding/runs/:collectionId", async (request, response) => {
     }
     source.lastRunStatus = "healthy";
     source.status = "active";
-    for (const item of normalized) fundingOpportunityStore.set(item.id, item);
-    publishFundingEvent({ id:randomUUID(), type:"source_run", title:`${source.name} published ${normalized.length} record${normalized.length === 1 ? "" : "s"}`, body:"The raw Bright Data dataset passed the minimum funding schema gate.", opportunityId:normalized[0]?.id ?? null, sourceId:source.id, createdAt:new Date().toISOString() });
-    response.json({ data:normalized, publishedCount:normalized.length, preservedLastKnownGood:false });
+    const publishedCount=publishNormalized(source,normalized);requestScoring();
+    publishFundingEvent({ id:randomUUID(), type:"source_run", title:`${source.name} published ${publishedCount} unique record${publishedCount === 1 ? "" : "s"}`, body:"The raw Bright Data dataset passed the schema and deduplication gates.", opportunityId:normalized[0]?.id ?? null, sourceId:source.id, createdAt:new Date().toISOString() });
+    response.json({ data:normalized, publishedCount, preservedLastKnownGood:false });
   } catch (error) {
     response.status(502).json({ error: error instanceof Error ? error.message : "Bright Data polling failed" });
   }
@@ -834,21 +880,29 @@ app.post("/api/funding/chat", async (request, response) => {
   }).safeParse(request.body);
   if (!parsed.success) return response.status(400).json({ error: "A valid funding question is required" });
   if (!labProfile) return response.status(409).json({ error:"Complete the lab profile before asking for matches" });
+  if (scoringState.status==='processing') return response.status(409).json({error:`Still reading grant JSON (${scoringState.completed}/${scoringState.total}). Try again when analysis finishes.`,code:'SCORING_IN_PROGRESS'});
   if (!process.env.NVIDIA_API_KEY || !process.env.NVIDIA_NIM_MODEL)
     return response.status(503).json({ error: "NVIDIA NIM not configured", code: "NIM_NOT_CONFIGURED" });
   const all = [...fundingOpportunityStore.values()];
+  const questionTokens=new Set(parsed.data.question.toLowerCase().split(/[^a-z0-9]+/).filter((token)=>token.length>3));
+  const retrievalScore=(item:FundingOpportunity)=>{
+    const record=JSON.stringify({title:item.title,funder:item.funder,summary:item.summary,researchAreas:item.researchAreas,evidence:item.evidence,raw:item.raw??{}}).toLowerCase();
+    let score=item.match.score/20;for(const token of questionTokens)if(record.includes(token))score+=4;return score;
+  };
   const selected = parsed.data.opportunityIds.length
     ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
-    : all.filter((item) => item.status !== "closed").sort((a,b) => b.match.score-a.match.score).slice(0, 8);
+    : all.filter((item) => item.status !== "closed").sort((a,b) => retrievalScore(b)-retrievalScore(a)).slice(0, 18);
   try {
     const provider = new FundingNimProvider({
       apiKey: process.env.NVIDIA_API_KEY,
       baseUrl: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
-      model: process.env.NVIDIA_NIM_MODEL,
+      model: fundingModel(),
     });
-    response.json(await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected }));
+    const catalog=all.map(({id,title,funder,summary,deadlineText,amountText,status,detailUrl})=>({id,title,funder,summary,deadlineText,amountText,status,detailUrl}));
+    response.json({...await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected,catalog }),model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length});
   } catch (error) {
-    response.status(502).json({ error: error instanceof Error ? error.message : "Funding chat failed" });
+    const recommended=selected.slice(0,3);const answer=recommended.length?`Based on the saved lab profile and the strongest retrieved records, start with:\n\n${recommended.map((item,index)=>`${index+1}. ${item.title} — ${item.funder}. ${item.match.explanation} Verify ${item.match.missingInformation.slice(0,2).join(' and ').toLowerCase()||'the official applicant conditions'} before applying.`).join('\n\n')}\n\nThese are discovery recommendations, not verified eligibility decisions. Open the linked official records before committing application effort.`:'No retained grant record is strong enough to recommend yet.';
+    response.json({answer,evidenceIds:recommended.flatMap((item)=>item.evidence.slice(0,2).map((entry)=>entry.id)),opportunityIds:recommended.map((item)=>item.id),followUpQuestions:['Which grant should I turn into an application checklist?'],draft:true,model:'evidence-safe fallback',recordsSearched:all.length,recordsRead:selected.length,warning:error instanceof Error?error.message:'Funding model temporarily unavailable'});
   }
 });
 app.listen(port, () =>

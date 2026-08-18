@@ -30,7 +30,7 @@ export function normalizeFundingRows(
   rows: unknown[],
   observedAt = new Date().toISOString(),
 ): FundingOpportunity[] {
-  return rows.flatMap((unknownRow, index) => {
+  return rows.flatMap((unknownRow) => {
     if (!unknownRow || typeof unknownRow !== 'object' || Array.isArray(unknownRow)) return [];
     const row = unknownRow as Record<string, unknown>;
     const title = first(row, ['title', 'opportunity_title', 'name', 'program_name']);
@@ -42,8 +42,8 @@ export function normalizeFundingRows(
     const eligibility = first(row, ['eligibility', 'eligible_applicants', 'who_can_apply']);
     const amountText = first(row, ['amount', 'award_amount', 'funding_amount', 'budget']) ?? 'Not stated';
     const summary = first(row, ['summary', 'description', 'purpose', 'research_focus']) ?? 'No summary was collected.';
-    const externalId = first(row, ['external_id', 'notice_id', 'opportunity_number']) ?? `${index}`;
-    const id = `bright-${createHash('sha256').update(`${source.id}:${externalId}:${title}`).digest('hex').slice(0, 18)}`;
+    const canonicalDetailUrl=new URL(detailUrl);canonicalDetailUrl.hash='';for(const key of [...canonicalDetailUrl.searchParams.keys()])if(/^utm_|^(?:ref|source|campaign)$/i.test(key))canonicalDetailUrl.searchParams.delete(key);
+    const id = `bright-${createHash('sha256').update(`${source.id}:${canonicalDetailUrl.toString().toLowerCase()}`).digest('hex').slice(0, 18)}`;
     const evidence: EvidencePassage[] = [
       { id:`${id}-title`, field:'title', passage:title, sourceUrl:detailUrl, observedAt, confidence:'high' },
       ...(deadlineText !== 'Not stated' ? [{ id:`${id}-deadline`, field:'deadline', passage:deadlineText, sourceUrl:detailUrl, observedAt, confidence:'high' as const }] : []),
@@ -69,6 +69,7 @@ export function normalizeFundingRows(
       },
       evidence,
       tasks:[{id:`${id}-task`,title:'Review the official opportunity and confirm eligibility',dueAt:deadline,status:'todo' as const}],
+      raw:structuredClone(row),
     }];
   });
 }
