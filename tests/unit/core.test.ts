@@ -35,7 +35,7 @@ describe('Bright Data funding normalization',()=>{
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({title:'Biomedical innovation award',amountMin:750000,provenance:'bright_data_live',geography:'US'});
     expect(rows[0]?.match.eligibility).toBe('insufficient_evidence');
-    expect(rows[0]?.evidence.map((item)=>item.field)).toEqual(['title','deadline','eligibility']);
+    expect(rows[0]?.evidence.map((item)=>item.field)).toEqual(['title','deadline','eligibility','amount','summary']);
   });
   it('closes a collected record whose deadline has passed',()=>{
     const rows=normalizeFundingRows(fundingSources[0],[{title:'Expired award',detail_url:'https://example.org/funding/expired',deadline:'2020-01-01'}]);

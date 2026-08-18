@@ -21,6 +21,10 @@ const parseDeadline = (value: string | null) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
+const absoluteUrl = (value: string, base: string) => {
+  try { return new URL(value, base).toString(); } catch { return null; }
+};
+
 export function normalizeFundingRows(
   source: FundingSource,
   rows: unknown[],
@@ -30,25 +34,28 @@ export function normalizeFundingRows(
     if (!unknownRow || typeof unknownRow !== 'object' || Array.isArray(unknownRow)) return [];
     const row = unknownRow as Record<string, unknown>;
     const title = first(row, ['title', 'opportunity_title', 'name', 'program_name']);
-    const detailUrl = first(row, ['detail_url', 'url', 'source_url', 'opportunity_url']);
+    const detailUrlRaw = first(row, ['detail_url', 'url', 'source_url', 'opportunity_url', 'link']);
+    const detailUrl = detailUrlRaw ? absoluteUrl(detailUrlRaw, source.sourceUrl) : null;
     if (!title || !detailUrl) return [];
     const deadlineText = first(row, ['deadline', 'deadline_raw', 'due_date', 'closing_date']) ?? 'Not stated';
     const deadline = parseDeadline(deadlineText);
     const eligibility = first(row, ['eligibility', 'eligible_applicants', 'who_can_apply']);
     const amountText = first(row, ['amount', 'award_amount', 'funding_amount', 'budget']) ?? 'Not stated';
-    const summary = first(row, ['summary', 'description', 'purpose']) ?? 'No summary was collected.';
+    const summary = first(row, ['summary', 'description', 'purpose', 'research_focus']) ?? 'No summary was collected.';
     const externalId = first(row, ['external_id', 'notice_id', 'opportunity_number']) ?? `${index}`;
     const id = `bright-${createHash('sha256').update(`${source.id}:${externalId}:${title}`).digest('hex').slice(0, 18)}`;
     const evidence: EvidencePassage[] = [
       { id:`${id}-title`, field:'title', passage:title, sourceUrl:detailUrl, observedAt, confidence:'high' },
       ...(deadlineText !== 'Not stated' ? [{ id:`${id}-deadline`, field:'deadline', passage:deadlineText, sourceUrl:detailUrl, observedAt, confidence:'high' as const }] : []),
       ...(eligibility ? [{ id:`${id}-eligibility`, field:'eligibility', passage:eligibility, sourceUrl:detailUrl, observedAt, confidence:'medium' as const }] : []),
+      ...(amountText !== 'Not stated' ? [{ id:`${id}-amount`, field:'amount', passage:amountText, sourceUrl:detailUrl, observedAt, confidence:'medium' as const }] : []),
+      { id:`${id}-summary`, field:'summary', passage:summary, sourceUrl:detailUrl, observedAt, confidence:'medium' as const },
     ];
     const amount = parseMoney(amountText);
     const deadlineState = deadline && new Date(deadline).getTime() < Date.now() ? 'closed' : deadline ? 'open' : 'watching';
     return [{
       id, sourceId:source.id, title, funder:source.organization, program:source.name, category:source.category,
-      researchAreas:[], summary, amountMin:amount, amountMax:amount, amountText, currency:'USD' as const,
+      researchAreas:(first(row,['research_areas','topics','focus_areas']) ?? '').split(',').map((value)=>value.trim()).filter(Boolean), summary, amountMin:amount, amountMax:amount, amountText, currency:'USD' as const,
       deadline, deadlineText, status:deadlineState as FundingOpportunity['status'], geography:'US' as const,
       careerStages:[], institutionTypes:[], requiredPartners:[], commercializationStages:[], sourceUrl:source.sourceUrl,
       detailUrl, observedAt, changedAt:null, sourceHealth:'healthy' as const, provenance:'bright_data_live' as const,
