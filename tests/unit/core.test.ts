@@ -41,4 +41,11 @@ describe('public source parsers',()=>{
     const html='<table><tbody><tr><td>CITY</td><td>RFP</td><td>CHI-1</td><td>Technology services</td><td>Open</td><td>08/17/2026</td><td>09/01/2026</td><td><a href="/vcsearch/solicitations/1">View</a></td></tr></tbody></table>';
     expect(publicScraperParsers.chicagoRows(html,source)[0]).toMatchObject({title:'Technology services',solicitation_id:'CHI-1',organization:'City of Chicago'});
   });
+  it('maps official US open-data API rows without contact data',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='us-nyc-current-bids')!;
+    const input=JSON.stringify([{request_id:'20260818001',short_title:'Transit engineering services',agency_name:'Transportation',type_of_notice_description:'Solicitation',selection_method_description:'Competitive Sealed Proposals',start_date:'2026-08-18T00:00:00.000',due_date:'2026-09-18T12:00:00.000',contact_name:'Private field not collected'}]);
+    const row=publicScraperParsers.nycRows(input,source)[0];
+    expect(row).toMatchObject({title:'Transit engineering services',solicitation_id:'20260818001',organization:'Transportation',status_raw:'Open'});
+    expect(row).not.toHaveProperty('contact_name');
+  });
 });

@@ -24,13 +24,19 @@ const canadaRows = readJson<unknown[]>(
 const chicagoRows = readJson<unknown[]>(
   "fixtures/recorded-live/us-chicago/run-live.json",
 );
+const nycRows = readJson<unknown[]>("fixtures/recorded-live/us-nyc/run-live.json");
+const montgomeryRows = readJson<unknown[]>("fixtures/recorded-live/us-montgomery/run-live.json");
+const sanFranciscoRows = readJson<unknown[]>("fixtures/recorded-live/us-san-francisco/run-live.json");
 
 const aslSource = liveSources.find((source) => source.slug === "australia-asl-tenders");
 const ccaSource = liveSources.find((source) => source.slug === "california-cca-procurement");
 const aaiSource = liveSources.find((source) => source.slug === "india-aai-publications");
 const canadaSource = liveSources.find((source) => source.slug === "canada-canadabuys");
 const chicagoSource = liveSources.find((source) => source.slug === "us-chicago-solicitations");
-if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !chicagoSource)
+const nycSource = liveSources.find((source) => source.slug === "us-nyc-current-bids");
+const montgomerySource = liveSources.find((source) => source.slug === "us-montgomery-solicitations");
+const sanFranciscoSource = liveSources.find((source) => source.slug === "us-san-francisco-bids");
+if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
   throw new Error("Recorded source configuration is incomplete");
 
 const aslResult = await ingestRows({
@@ -61,6 +67,27 @@ const chicagoResult = await ingestRows({
   store,
   observedAt,
 });
+const nycResult = await ingestRows({
+  source: nycSource,
+  collectionId: "public-nyc-recorded-live",
+  rows: nycRows,
+  store,
+  observedAt,
+});
+const montgomeryResult = await ingestRows({
+  source: montgomerySource,
+  collectionId: "public-montgomery-recorded-live",
+  rows: montgomeryRows,
+  store,
+  observedAt,
+});
+const sanFranciscoResult = await ingestRows({
+  source: sanFranciscoSource,
+  collectionId: "public-san-francisco-recorded-live",
+  rows: sanFranciscoRows,
+  store,
+  observedAt,
+});
 
 // The AAI run is a real post-heal publication index. Validate its source
 // contract separately; it is not promoted as a canonical contract opportunity.
@@ -80,7 +107,7 @@ const opportunities = [...store.opportunities.values()].map((opportunity) => ({
   raw: {
     ...opportunity.raw,
     extraction_evidence:
-      opportunity.sourceId === canadaSource.id || opportunity.sourceId === chicagoSource.id
+      [canadaSource.id, chicagoSource.id, nycSource.id, montgomerySource.id, sanFranciscoSource.id].includes(opportunity.sourceId)
         ? "Completed public-page scraper run"
         : "Completed Bright Data custom collector dataset run",
   },
@@ -132,6 +159,30 @@ writeFileSync(
           published: chicagoResult.published.length,
         },
         {
+          slug: nycSource.slug,
+          collectorId: null,
+          artifact: "us-nyc/run-live.json",
+          artifactKind: "completed public API scraper run",
+          runStatus: nycResult.run.status,
+          published: nycResult.published.length,
+        },
+        {
+          slug: montgomerySource.slug,
+          collectorId: null,
+          artifact: "us-montgomery/run-live.json",
+          artifactKind: "completed public API scraper run",
+          runStatus: montgomeryResult.run.status,
+          published: montgomeryResult.published.length,
+        },
+        {
+          slug: sanFranciscoSource.slug,
+          collectorId: null,
+          artifact: "us-san-francisco/run-live.json",
+          artifactKind: "completed public API scraper run",
+          runStatus: sanFranciscoResult.run.status,
+          published: sanFranciscoResult.published.length,
+        },
+        {
           slug: aaiSource.slug,
           collectorId: aaiSource.collectorId,
           artifact: "india-aai/post-heal.json",
@@ -168,5 +219,8 @@ console.log(
     aaiContractValidRows: aaiValidCount,
     canadaStatus: canadaResult.run.status,
     chicagoStatus: chicagoResult.run.status,
+    nycStatus: nycResult.run.status,
+    montgomeryStatus: montgomeryResult.run.status,
+    sanFranciscoStatus: sanFranciscoResult.run.status,
   }),
 );

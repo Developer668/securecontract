@@ -5,7 +5,9 @@ test("core opportunity workflow", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
   const opportunityResponse = await page.request.get("/api/opportunities");
   expect(opportunityResponse.ok()).toBe(true);
-  expect((await opportunityResponse.json()).provenance).toBe("recorded_live");
+  const opportunityBody = await opportunityResponse.json();
+  expect(opportunityBody.provenance).toBe("recorded_live");
+  expect(opportunityBody.data.length).toBeGreaterThan(1000);
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
   await page.getByLabel("Status filter").selectOption("all");
   await page.getByLabel("Close detail").click();
@@ -27,6 +29,13 @@ test("core opportunity workflow", async ({ page }) => {
 test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
+  await expect(page.getByText("1055 opportunities")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Find more opportunities" })).toBeEnabled();
+  await page.getByLabel("Close detail").click();
+  await page.locator(".advanced-filters summary").click();
+  await page.getByLabel("Buyer or agency").fill("Transportation");
+  await expect(page.locator(".result-count strong")).not.toHaveText("1055");
+  await page.getByRole("button", { name: "Clear advanced filters" }).click();
   await page.getByLabel("Status filter").selectOption("all");
   await page.getByLabel("Country filter").selectOption("AU");
   await expect(page.getByText("Capacity Investment Scheme NEM Dispatchable").first()).toBeVisible();
@@ -43,7 +52,12 @@ test("filters and one-click live operations", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Run all live sources" })).toBeEnabled();
   await expect(page.getByText("CanadaBuys tender opportunities")).toBeVisible();
   await expect(page.getByText("City of Chicago active solicitations")).toBeVisible();
-  await expect(page.getByText("25 rows · 25 valid")).toHaveCount(2);
+  await expect(page.getByText("New York City current bids")).toBeVisible();
+  await expect(page.getByText("Montgomery County active solicitations")).toBeVisible();
+  await expect(page.getByText("San Francisco open bid opportunities")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Source unavailable" })).toBeDisabled();
+  await expect(page.getByText("860 rows · 860 valid")).toBeVisible();
+  await expect(page.getByText("88 rows · 88 valid")).toBeVisible();
   await expect(page.getByText("2 verified scraper repairs")).toBeVisible();
   await expect(page.getByLabel("Operator secret")).toHaveCount(0);
 });

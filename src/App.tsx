@@ -140,7 +140,7 @@ function OpportunityTable({
   onSelect,
 }: {
   items: Opportunity[];
-  selected: Opportunity;
+  selected: Opportunity | null;
   onSelect: (opportunity: Opportunity) => void;
 }) {
   return (
@@ -162,7 +162,7 @@ function OpportunityTable({
           {items.map((item) => (
             <tr
               key={item.id}
-              className={selected.id === item.id ? "selected" : ""}
+              className={selected?.id === item.id ? "selected" : ""}
               onClick={() => onSelect(item)}
             >
               <td>
@@ -707,16 +707,27 @@ function OpportunitiesView({
   items,
   sources,
   provenance,
+  onRefresh,
 }: {
   openApplication: boolean;
   items: Opportunity[];
-  sources: SourceConfig[];
+  sources: SourceView[];
   provenance: string;
+  onRefresh: () => Promise<void>;
 }) {
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("all");
   const [status, setStatus] = useState("open");
   const [sourceId, setSourceId] = useState("all");
+  const [buyer, setBuyer] = useState("");
+  const [procedure, setProcedure] = useState("all");
+  const [verification, setVerification] = useState("all");
+  const [changeFilter, setChangeFilter] = useState("all");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(100);
+  const [findingMore, setFindingMore] = useState(false);
+  const [findState, setFindState] = useState("");
   const [selectedId, setSelectedId] = useState(
     items.find((item) => item.status === "open")?.id ?? items[0]?.id ?? "",
   );
@@ -736,6 +747,10 @@ function OpportunitiesView({
     () => [...new Set(items.map((item) => item.status))],
     [items],
   );
+  const procedures = useMemo(
+    () => [...new Set(items.map((item) => item.procedureType))].sort(),
+    [items],
+  );
   const degraded = sources.find((source) => source.status === "degraded");
   const filtered = useMemo(
     () =>
@@ -744,15 +759,49 @@ function OpportunitiesView({
           (country === "all" || item.countryCode === country) &&
           (status === "all" || item.status === status) &&
           (sourceId === "all" || item.sourceId === sourceId) &&
+          (procedure === "all" || item.procedureType === procedure) &&
+          (verification === "all" || item.verification === verification) &&
+          (changeFilter === "all" ||
+            (changeFilter === "changed" && item.changes.length > 0) ||
+            (changeFilter === "critical" &&
+              item.changes.some((change) => change.severity === "critical"))) &&
+          (!dueFrom || Boolean(item.submissionDueAt && item.submissionDueAt.slice(0, 10) >= dueFrom)) &&
+          (!dueTo || Boolean(item.submissionDueAt && item.submissionDueAt.slice(0, 10) <= dueTo)) &&
+          item.buyerOriginal.toLowerCase().includes(buyer.toLowerCase()) &&
           `${item.titleOriginal} ${item.buyerOriginal} ${item.externalId}`
             .toLowerCase()
             .includes(search.toLowerCase()),
       ),
-    [items, search, country, status, sourceId],
+    [items, search, country, status, sourceId, procedure, verification, changeFilter, dueFrom, dueTo, buyer],
   );
   const selected =
     filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
-  if (!selected)
+  const findMore = async () => {
+    setFindingMore(true);
+    const publicSources = sources.filter(
+      (source) => source.status === "active" && source.collectionMethod === "public_html",
+    );
+    let completed = 0;
+    const failures: string[] = [];
+    for (const source of publicSources) {
+      try {
+        await runSourceCollection(source, (state) =>
+          setFindState(`${completed + 1}/${publicSources.length} · ${source.countryCode} · ${state}`),
+        );
+        completed += 1;
+      } catch {
+        failures.push(source.name);
+      }
+    }
+    await onRefresh();
+    setFindState(
+      failures.length
+        ? `${completed} sources refreshed · ${failures.length} unavailable`
+        : `${completed} public sources refreshed`,
+    );
+    setFindingMore(false);
+  };
+  if (!items.length)
     return (
       <main>
         <section className="content full">
@@ -779,14 +828,36 @@ function OpportunitiesView({
                 : "Public procurement opportunities with source-level provenance."}
             </p>
           </div>
-          <Status tone="info">
-            {provenance === "postgres"
-              ? "Validated canonical data"
-              : provenance === "recorded_live"
-                ? "Recorded live run · timestamped"
-                : "Demonstration fixtures · not live"}
-          </Status>
+          <div className="page-actions">
+            <Status tone="info">
+              {provenance === "postgres"
+                ? "Validated canonical data"
+                : provenance === "recorded_live"
+                  ? "Recorded live run · timestamped"
+                  : "Demonstration fixtures · not live"}
+            </Status>
+            {!openApplication && (
+              <button className="primary" disabled={findingMore} onClick={() => void findMore()}>
+                <RefreshCw className={findingMore ? "spin" : ""} size={15} />
+                {findingMore ? "Searching public sources" : "Find more opportunities"}
+              </button>
+            )}
+          </div>
         </div>
+        {!openApplication && (
+          <details className="advanced-filters">
+            <summary><Filter size={14} /> Advanced filters <span>Buyer · procedure · dates · evidence · changes</span></summary>
+            <div className="advanced-filter-grid">
+              <label>Buyer or agency<input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="e.g. Transportation" /></label>
+              <label>Procedure<select value={procedure} onChange={(event) => setProcedure(event.target.value)}><option value="all">All procedures</option>{procedures.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+              <label>Due from<input type="date" value={dueFrom} onChange={(event) => setDueFrom(event.target.value)} /></label>
+              <label>Due through<input type="date" value={dueTo} onChange={(event) => setDueTo(event.target.value)} /></label>
+              <label>Evidence<select value={verification} onChange={(event) => setVerification(event.target.value)}><option value="all">Any verification</option><option value="verified">Verified</option><option value="partial">Partial</option><option value="last_known_good">Last known good</option></select></label>
+              <label>Changes<select value={changeFilter} onChange={(event) => setChangeFilter(event.target.value)}><option value="all">Any change state</option><option value="changed">Has changes</option><option value="critical">Critical changes</option></select></label>
+              <button className="text-button" onClick={() => { setBuyer(""); setProcedure("all"); setDueFrom(""); setDueTo(""); setVerification("all"); setChangeFilter("all"); }}>Clear advanced filters</button>
+            </div>
+          </details>
+        )}
         <div className="toolbar">
           <label className="search">
             <Search size={17} />
@@ -871,17 +942,24 @@ function OpportunitiesView({
                 ? "Replayed from completed live scraper runs"
                 : "Data shown is a clearly labeled product demonstration"}
           </span>
+          {findState && <small>{findState}</small>}
         </div>
         <OpportunityTable
-          items={filtered}
+          items={filtered.slice(0, visibleLimit)}
           selected={selected}
           onSelect={(item) => {
             setSelectedId(item.id);
             setDetailOpen(true);
           }}
         />
+        {filtered.length > visibleLimit && (
+          <div className="more-results">
+            <span>Showing {visibleLimit.toLocaleString()} of {filtered.length.toLocaleString()}</span>
+            <button className="secondary" onClick={() => setVisibleLimit((value) => value + 100)}>Show 100 more</button>
+          </div>
+        )}
       </section>
-      {detailOpen && (
+      {detailOpen && selected && (
         <Detail
           item={selected}
           sources={sources}
@@ -951,6 +1029,8 @@ function RunSource({
 }) {
   const [state, setState] = useState("");
   const [running, setRunning] = useState(false);
+  const unavailable =
+    source.collectionMethod === "public_html" && source.status !== "active";
   const run = async () => {
     setRunning(true);
     try {
@@ -966,11 +1046,17 @@ function RunSource({
     <div className="run-control">
       <button
         className="secondary"
-        disabled={(!source.collectorId && source.collectionMethod !== "public_html") || running}
+        disabled={unavailable || (!source.collectorId && source.collectionMethod !== "public_html") || running}
         onClick={() => void run()}
       >
         <RefreshCw className={running ? "spin" : ""} size={14} />
-        {running ? "Running" : source.publishToOpportunityFeed === false ? "Refresh index" : "Run collector"}
+        {running
+          ? "Running"
+          : unavailable
+            ? "Source unavailable"
+            : source.publishToOpportunityFeed === false
+              ? "Refresh index"
+              : "Run collector"}
       </button>
       {state && <small className={state.includes("failed") ? "inline-error" : "run-state"}>{state}</small>}
     </div>
@@ -1044,7 +1130,7 @@ function SourcesView({
         </div>
         <section className="connection-strip" aria-label="Live configuration">
           <div><span className={`connection-dot ${serviceState.brightDataConfigured ? "online" : ""}`} /> Bright Data</div>
-          <div><span className="connection-dot online" /> Public-page scrapers</div>
+          <div><span className="connection-dot online" /> Official public sources</div>
           <div><span className={`connection-dot ${serviceState.nvidiaConfigured ? "online" : ""}`} /> NVIDIA NIM</div>
           <strong>{refreshState || `${sources.filter((source) => source.status === "active").length} sources ready`}</strong>
         </section>
@@ -1179,6 +1265,7 @@ export default function App() {
           sources={sources}
           provenance={provenance}
           openApplication={view === "application"}
+          onRefresh={loadData}
         />
       )}
     </>

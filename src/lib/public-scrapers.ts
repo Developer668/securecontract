@@ -25,7 +25,7 @@ async function fetchHtml(url: string) {
   const { stdout } = await execFileAsync(
     "curl",
     ["--compressed", "--fail", "--location", "--silent", "--show-error", url],
-    { maxBuffer: 12 * 1024 * 1024, timeout: 30_000 },
+    { maxBuffer: 24 * 1024 * 1024, timeout: 30_000 },
   );
   return stdout;
 }
@@ -85,8 +85,7 @@ function canadaBuysRows(html: string, source: SourceConfig) {
         row.title &&
         row.detail_url &&
         isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
-    )
-    .slice(0, 25);
+    );
 }
 
 function chicagoRows(html: string, source: SourceConfig) {
@@ -116,15 +115,139 @@ function chicagoRows(html: string, source: SourceConfig) {
         row.title &&
         row.detail_url &&
         isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
-    )
-    .slice(0, 25);
+    );
+}
+
+type JsonRow = Record<string, unknown>;
+const jsonRows = (text: string) => JSON.parse(text) as JsonRow[];
+const stringValue = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+const publicDate = (value: unknown) => {
+  const date = stringValue(value);
+  return /^(?:9999|0000)-/.test(date) ? "" : date;
+};
+const nestedUrl = (value: unknown) => {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "url" in value)
+    return stringValue((value as { url?: unknown }).url);
+  return "";
+};
+
+function nycRows(text: string, source: SourceConfig) {
+  return jsonRows(text)
+    .map((row) => {
+      const requestId = stringValue(row.request_id);
+      const description = [
+        row.additional_description_1,
+        row.additional_description_2,
+        row.additional_description_3,
+      ]
+        .map(stringValue)
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .slice(0, 1200);
+      return {
+        title: stringValue(row.short_title),
+        solicitation_id: requestId || stringValue(row.pin),
+        organization: stringValue(row.agency_name) || "City of New York",
+        status_raw: "Open",
+        procedure_type_raw: stringValue(row.selection_method_description),
+        published_date_raw: publicDate(row.start_date),
+        closing_date_raw: publicDate(row.due_date),
+        brief_description: description || undefined,
+        detail_url: requestId
+          ? `https://a856-cityrecord.nyc.gov/RequestDetail/${encodeURIComponent(requestId)}`
+          : source.sourceUrl,
+        source_url: source.sourceUrl,
+      };
+    })
+    .filter(
+      (row) =>
+        row.title &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+function montgomeryRows(text: string, source: SourceConfig) {
+  return jsonRows(text)
+    .map((row) => ({
+      title: stringValue(row.description),
+      solicitation_id: stringValue(row.number),
+      organization: stringValue(row.department) || "Montgomery County",
+      status_raw: stringValue(row.status),
+      procedure_type_raw: stringValue(row.type),
+      published_date_raw: publicDate(row.issuancedate),
+      closing_date_raw: publicDate(row.closingdate),
+      brief_description: [
+        stringValue(row.construction) === "Y" ? "Construction solicitation" : "",
+        stringValue(row.lsbrpindicator) === "Y" ? "Local Small Business Reserve Program" : "",
+      ].filter(Boolean).join(" · ") || undefined,
+      detail_url: source.sourceUrl,
+      source_url: source.sourceUrl,
+    }))
+    .filter(
+      (row) =>
+        row.title &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+function sanFranciscoRows(text: string, source: SourceConfig) {
+  return jsonRows(text)
+    .map((row) => ({
+      title: stringValue(row.title),
+      solicitation_id: stringValue(row.event_id),
+      organization: stringValue(row.department) || "City and County of San Francisco",
+      status_raw: /open|amended/i.test(stringValue(row.status)) ? "Open" : stringValue(row.status),
+      procedure_type_raw: stringValue(row.type),
+      published_date_raw: publicDate(row.open_date),
+      closing_date_raw: publicDate(row.due_date),
+      brief_description: stringValue(row.category) || undefined,
+      detail_url: nestedUrl(row.sfcitypartner_link) || source.sourceUrl,
+      source_url: source.sourceUrl,
+    }))
+    .filter(
+      (row) =>
+        row.title &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+function sourceRequestUrl(source: SourceConfig) {
+  const url = new URL(source.inputUrl);
+  if (source.slug === "us-nyc-current-bids") {
+    url.searchParams.set("$limit", "5000");
+    url.searchParams.set("$order", "due_date ASC");
+    url.searchParams.set(
+      "$where",
+      `due_date > '${new Date().toISOString().slice(0, 19)}' AND type_of_notice_description = 'Solicitation'`,
+    );
+  }
+  if (source.slug === "us-montgomery-solicitations") {
+    url.searchParams.set("$limit", "2000");
+    url.searchParams.set("$where", "status = 'Active'");
+  }
+  if (source.slug === "us-san-francisco-bids") {
+    url.searchParams.set("$limit", "2000");
+  }
+  return url.toString();
 }
 
 export async function scrapePublicSource(source: SourceConfig) {
-  const html = await fetchHtml(source.inputUrl);
+  const html = await fetchHtml(sourceRequestUrl(source));
   if (source.slug === "canada-canadabuys") return canadaBuysRows(html, source);
   if (source.slug === "us-chicago-solicitations") return chicagoRows(html, source);
+  if (source.slug === "us-nyc-current-bids") return nycRows(html, source);
+  if (source.slug === "us-montgomery-solicitations") return montgomeryRows(html, source);
+  if (source.slug === "us-san-francisco-bids") return sanFranciscoRows(html, source);
   throw new Error(`No public scraper is registered for ${source.slug}`);
 }
 
-export const publicScraperParsers = { canadaBuysRows, chicagoRows };
+export const publicScraperParsers = {
+  canadaBuysRows,
+  chicagoRows,
+  nycRows,
+  montgomeryRows,
+  sanFranciscoRows,
+};

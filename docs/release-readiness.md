@@ -9,8 +9,11 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 | Australian Sustainability Leaders tenders | Australia / national program | `c_msxxrkb9zckaljn0a` | 4 | Healthy / active |
 | Airports Authority of India publication index | India / AAI | `c_msxulljug99b25hby` | 234 publication rows | Warning: auxiliary index, not canonical opportunities |
 | California Community Choice Association | United States / California | `c_msxy8dx318cy3aekq5` | 1 | Healthy / active |
-| CanadaBuys open tender notices | Canada / national | Official daily CSV | 25 | Healthy / active |
-| City of Chicago active solicitations | United States / Chicago | Official public table | 25 | Healthy / active |
+| CanadaBuys open tender notices | Canada / national | Official daily CSV | 860 | Healthy / active |
+| City of Chicago active solicitations | United States / Chicago | Official public table | 25 last known good | Warning: official endpoint unavailable |
+| Current NYC bids | United States / New York City | NYC Open Data API | 88 | Healthy / active |
+| Montgomery County solicitations | United States / Maryland | dataMontgomery API | 13 | Healthy / active |
+| San Francisco open bid opportunities | United States / San Francisco | DataSF API | 86 | Healthy / active |
 
 ## Bright Data
 
@@ -27,7 +30,7 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains accepted ASL, CCA, CanadaBuys, and Chicago runs; the auxiliary AAI index is not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 1,060 accepted opportunities; the auxiliary AAI index is not silently promoted.
 
 ## NVIDIA NIM
 
@@ -39,7 +42,7 @@ The server-only provider, grounded context pack, structured output validation, c
 |---|---|
 | Lint | PASS |
 | Typecheck | PASS |
-| Unit/contract/integration tests | PASS — 23 tests |
+| Unit/contract/integration tests | PASS — 24 tests |
 | Desktop/mobile E2E | PASS — 4 tests |
 | Safari visual verification | PASS |
 | Live NVIDIA NIM verification | PASS |

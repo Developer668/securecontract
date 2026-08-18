@@ -4,7 +4,7 @@
 
 SecureContract is a self-healing, evidence-grounded public-procurement intelligence product. It is designed to turn structurally different public portals into one canonical opportunity stream while preserving what the government site and scraper actually said.
 
-The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay contains 46 current opportunities from Australia, Canada, and the United States. Live collection through the product and live NVIDIA NIM inference are both verified.
+The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay currently contains 1,060 opportunities, including 1,055 open listings and 204 US listings. Live collection through the product and live NVIDIA NIM inference are both verified.
 
 ## Why this exists
 
@@ -72,7 +72,7 @@ When a run is rejected, SecureContract does not replace accepted opportunities o
 
 The Bright Data token is never sent to the browser. A user can run every configured source from Operations without a second login; the same-origin server performs the collection and keeps provider credentials private. Cron remains protected by `CRON_SECRET`. Source URLs are restricted to public HTTP(S) targets and reject embedded credentials, localhost, and private-network IPs.
 
-CanadaBuys and the City of Chicago are collected from their official anonymous CSV/HTML endpoints because Scraper Studio rejected or failed generation for those government domains. They still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline.
+CanadaBuys, New York City, Montgomery County, San Francisco, and Chicago use official anonymous CSV, JSON, or HTML endpoints because Scraper Studio rejected or failed generation for several government domains. They still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline. Chicago's live page is currently unavailable, so its source is warning-only and its last accepted rows are preserved rather than represented as freshly collected.
 
 Current proof status is documented in [docs/bright-data-proof.md](docs/bright-data-proof.md). No Collector ID is fabricated. The self-healing evidence protocol is in [docs/healing-proof.md](docs/healing-proof.md).
 
@@ -139,7 +139,7 @@ pnpm tsx scripts/validate-source.ts run-metrics.json
 
 Build the evidence replay with `pnpm replay:build`. It preserves artifact-level provenance: completed dataset runs, approved extraction previews, and rejected runs remain distinct.
 
-In **Operations**, click **Run all live sources**. SecureContract runs the active Bright Data and public-page collectors sequentially, then refreshes the feed only after each run passes validation. AAI is an auxiliary publication index and is deliberately archived without being published as a contract opportunity.
+In **Operations**, click **Run all live sources**. In Discover, **Find more opportunities** refreshes every active official public source without requiring a second login. SecureContract publishes only after each run passes validation. AAI is an auxiliary publication index and is deliberately archived without being published as a contract opportunity.
 
 ## Project map
 

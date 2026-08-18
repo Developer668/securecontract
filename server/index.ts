@@ -92,13 +92,31 @@ if (recordedLiveMode) {
       id: "recorded-canadabuys-public-run",
       sourceId: "21000000-0000-4000-8000-000000000004",
       collectionId: "public-canadabuys-recorded-live",
-      rowCount: 25,
+      rowCount: 860,
     },
     {
       id: "recorded-chicago-public-run",
       sourceId: "21000000-0000-4000-8000-000000000005",
       collectionId: "public-chicago-recorded-live",
       rowCount: 25,
+    },
+    {
+      id: "recorded-nyc-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000006",
+      collectionId: "public-nyc-recorded-live",
+      rowCount: 88,
+    },
+    {
+      id: "recorded-montgomery-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000007",
+      collectionId: "public-montgomery-recorded-live",
+      rowCount: 13,
+    },
+    {
+      id: "recorded-san-francisco-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000008",
+      collectionId: "public-san-francisco-recorded-live",
+      rowCount: 87,
     },
   ]) {
     memoryStore.runs.push({
@@ -363,7 +381,12 @@ app.post("/api/runs/:sourceId", async (request, response) => {
         observedAt: new Date().toISOString(),
         publish: source.publishToOpportunityFeed !== false,
       });
-      return response.json(result);
+      return response.json({
+        run: result.run,
+        validation: result.validation,
+        publishedCount: result.published.length,
+        preservedLastKnownGood: result.preservedLastKnownGood,
+      });
     } catch (error) {
       return response.status(502).json({
         error: error instanceof Error ? error.message : "Public scraper failed",

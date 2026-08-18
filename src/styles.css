@@ -101,6 +101,7 @@ main.split { grid-template-columns: minmax(560px, 55%) minmax(500px, 45%); }
 .page-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; }
 .page-title h1 { margin: 2px 0 7px; font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -0.055em; font-weight: 780; }
 .page-title p { margin: 0; color: var(--muted); max-width: 62ch; line-height: 1.6; }
+.page-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .eyebrow { margin: 0 0 7px; color: var(--blue); font: 500 10px/1.2 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.12em; }
 
 .primary, .secondary, .copilot-launch {
@@ -132,12 +133,23 @@ main.split { grid-template-columns: minmax(560px, 55%) minmax(500px, 45%); }
 .filter { min-height: 44px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); display: flex; align-items: center; padding: 0 10px; }
 .filter select { appearance: none; border: 0; outline: 0; background: transparent; padding: 0 21px 0 6px; font-size: 12px; font-weight: 650; }
 .filter svg:last-child { margin-left: -17px; pointer-events: none; }
+.advanced-filters { margin: -4px 0 4px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.advanced-filters summary { display: flex; align-items: center; gap: 7px; padding: 12px 2px; cursor: pointer; list-style: none; color: #344158; font-size: 11px; font-weight: 750; }
+.advanced-filters summary::-webkit-details-marker { display: none; }
+.advanced-filters summary span { margin-left: auto; color: var(--muted); font-weight: 500; }
+.advanced-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 12px; padding: 4px 0 16px; }
+.advanced-filter-grid label { display: flex; flex-direction: column; gap: 6px; color: #687184; font-size: 10px; font-weight: 700; }
+.advanced-filter-grid input, .advanced-filter-grid select { min-height: 39px; width: 100%; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; outline: 0; background: var(--paper); font-size: 11px; }
+.advanced-filter-grid input:focus, .advanced-filter-grid select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(40, 85, 217, 0.1); }
+.advanced-filter-grid .text-button { align-self: end; justify-self: start; }
 .warning-banner { border-left: 3px solid #b97b1c; background: var(--amber-soft); padding: 13px 15px; display: flex; align-items: center; gap: 10px; color: #684513; }
 .warning-banner div { flex: 1; }
 .warning-banner button { border: 0; background: transparent; color: var(--blue-dark); font-weight: 700; }
 .result-count { padding: 24px 1px 11px; color: #424d61; }
 .result-count strong { font-size: 18px; font-variant-numeric: tabular-nums; }
 .result-count span { color: #848b96; }
+.result-count small { display: block; margin-top: 5px; color: var(--blue-dark); font: 500 10px/1.4 "IBM Plex Mono", monospace; }
+.more-results { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 2px 0; color: var(--muted); font-size: 11px; }
 
 .table-wrap { overflow: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 10px 30px rgba(33, 40, 51, 0.035); }
 table { width: 100%; border-collapse: collapse; min-width: 980px; }
@@ -333,9 +345,15 @@ td small { display: block; color: #7b8390; margin-top: 3px; }
   .page-title { align-items: flex-start; margin-bottom: 20px; }
   .page-title h1 { font-size: 29px; }
   .page-title > .status { display: none; }
+  .page-title { flex-wrap: wrap; }
+  .page-actions { width: 100%; justify-content: space-between; }
+  .page-actions > .status { display: none; }
+  .page-actions .primary { flex: 1; }
   .toolbar { overflow-x: auto; padding-bottom: 4px; }
   .search { min-width: 240px; }
   .filter { min-width: max-content; }
+  .advanced-filters summary span { display: none; }
+  .advanced-filter-grid { grid-template-columns: 1fr 1fr; }
   .result-count span { display: none; }
   .detail { inset: 58px 0 0; height: auto; }
   .detail-title { padding: 17px 14px 13px; }
