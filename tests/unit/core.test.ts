@@ -48,4 +48,9 @@ describe('public source parsers',()=>{
     expect(row).toMatchObject({title:'Transit engineering services',solicitation_id:'20260818001',organization:'Transportation',status_raw:'Open'});
     expect(row).not.toHaveProperty('contact_name');
   });
+  it('maps multilingual TED notices and keeps the latest open lot deadline',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='eu-ted-open-notices')!;
+    const rows=publicScraperParsers.tedRows([{'publication-number':'123-2026','notice-title':{eng:'Rail engineering services'},'buyer-name':{eng:['European Rail Agency']},'form-type':'competition','publication-date':'2026-08-18Z','deadline-receipt-tender-date-lot':['2026-08-01+02:00','2027-01-10+01:00']}],source);
+    expect(rows[0]).toMatchObject({title:'Rail engineering services',solicitation_id:'123-2026',organization:'European Rail Agency',closing_date_raw:'2027-01-10T23:59:59+01:00'});
+  });
 });

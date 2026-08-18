@@ -779,7 +779,9 @@ function OpportunitiesView({
   const findMore = async () => {
     setFindingMore(true);
     const publicSources = sources.filter(
-      (source) => source.status === "active" && source.collectionMethod === "public_html",
+      (source) =>
+        source.status === "active" &&
+        (source.collectionMethod === "public_html" || source.collectionMethod === "public_api"),
     );
     let completed = 0;
     const failures: string[] = [];
@@ -1030,7 +1032,7 @@ function RunSource({
   const [state, setState] = useState("");
   const [running, setRunning] = useState(false);
   const unavailable =
-    source.collectionMethod === "public_html" && source.status !== "active";
+    source.collectionMethod !== "bright_data" && source.status !== "active";
   const run = async () => {
     setRunning(true);
     try {
@@ -1046,7 +1048,7 @@ function RunSource({
     <div className="run-control">
       <button
         className="secondary"
-        disabled={unavailable || (!source.collectorId && source.collectionMethod !== "public_html") || running}
+        disabled={unavailable || (!source.collectorId && source.collectionMethod === "bright_data") || running}
         onClick={() => void run()}
       >
         <RefreshCw className={running ? "spin" : ""} size={14} />
@@ -1094,10 +1096,10 @@ function SourcesView({
       (source) =>
         source.status === "active" &&
         source.publishToOpportunityFeed !== false &&
-        (source.collectionMethod === "public_html" || Boolean(source.collectorId)),
+        (source.collectionMethod !== "bright_data" || Boolean(source.collectorId)),
     );
     const ordered = [...active].sort((left, right) =>
-      left.collectionMethod === "public_html" && right.collectionMethod !== "public_html" ? -1 : 1,
+      left.collectionMethod !== "bright_data" && right.collectionMethod === "bright_data" ? -1 : 1,
     );
     setRefreshing(true);
     try {

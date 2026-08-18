@@ -21,6 +21,7 @@ const aaiRows = readJson<unknown[]>(
 const canadaRows = readJson<unknown[]>(
   "fixtures/recorded-live/canada-canadabuys/run-live.json",
 );
+const tedRows = readJson<unknown[]>("fixtures/recorded-live/eu-ted/run-live.json");
 const chicagoRows = readJson<unknown[]>(
   "fixtures/recorded-live/us-chicago/run-live.json",
 );
@@ -32,11 +33,12 @@ const aslSource = liveSources.find((source) => source.slug === "australia-asl-te
 const ccaSource = liveSources.find((source) => source.slug === "california-cca-procurement");
 const aaiSource = liveSources.find((source) => source.slug === "india-aai-publications");
 const canadaSource = liveSources.find((source) => source.slug === "canada-canadabuys");
+const tedSource = liveSources.find((source) => source.slug === "eu-ted-open-notices");
 const chicagoSource = liveSources.find((source) => source.slug === "us-chicago-solicitations");
 const nycSource = liveSources.find((source) => source.slug === "us-nyc-current-bids");
 const montgomerySource = liveSources.find((source) => source.slug === "us-montgomery-solicitations");
 const sanFranciscoSource = liveSources.find((source) => source.slug === "us-san-francisco-bids");
-if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
+if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
   throw new Error("Recorded source configuration is incomplete");
 
 const aslResult = await ingestRows({
@@ -57,6 +59,13 @@ const canadaResult = await ingestRows({
   source: canadaSource,
   collectionId: "public-canadabuys-recorded-live",
   rows: canadaRows,
+  store,
+  observedAt,
+});
+const tedResult = await ingestRows({
+  source: tedSource,
+  collectionId: "public-ted-recorded-live",
+  rows: tedRows,
   store,
   observedAt,
 });
@@ -107,7 +116,7 @@ const opportunities = [...store.opportunities.values()].map((opportunity) => ({
   raw: {
     ...opportunity.raw,
     extraction_evidence:
-      [canadaSource.id, chicagoSource.id, nycSource.id, montgomerySource.id, sanFranciscoSource.id].includes(opportunity.sourceId)
+      [canadaSource.id, tedSource.id, chicagoSource.id, nycSource.id, montgomerySource.id, sanFranciscoSource.id].includes(opportunity.sourceId)
         ? "Completed public-page scraper run"
         : "Completed Bright Data custom collector dataset run",
   },
@@ -149,6 +158,14 @@ writeFileSync(
           artifactKind: "completed public-page scraper run",
           runStatus: canadaResult.run.status,
           published: canadaResult.published.length,
+        },
+        {
+          slug: tedSource.slug,
+          collectorId: null,
+          artifact: "eu-ted/run-live.json",
+          artifactKind: "completed official public API scraper run",
+          runStatus: tedResult.run.status,
+          published: tedResult.published.length,
         },
         {
           slug: chicagoSource.slug,
@@ -218,6 +235,7 @@ console.log(
     ccaStatus: ccaResult.run.status,
     aaiContractValidRows: aaiValidCount,
     canadaStatus: canadaResult.run.status,
+    tedStatus: tedResult.run.status,
     chicagoStatus: chicagoResult.run.status,
     nycStatus: nycResult.run.status,
     montgomeryStatus: montgomeryResult.run.status,

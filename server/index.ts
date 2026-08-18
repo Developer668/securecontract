@@ -92,7 +92,13 @@ if (recordedLiveMode) {
       id: "recorded-canadabuys-public-run",
       sourceId: "21000000-0000-4000-8000-000000000004",
       collectionId: "public-canadabuys-recorded-live",
-      rowCount: 860,
+      rowCount: 883,
+    },
+    {
+      id: "recorded-ted-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000009",
+      collectionId: "public-ted-recorded-live",
+      rowCount: 4500,
     },
     {
       id: "recorded-chicago-public-run",
@@ -104,7 +110,7 @@ if (recordedLiveMode) {
       id: "recorded-nyc-public-run",
       sourceId: "21000000-0000-4000-8000-000000000006",
       collectionId: "public-nyc-recorded-live",
-      rowCount: 88,
+      rowCount: 89,
     },
     {
       id: "recorded-montgomery-public-run",
@@ -116,7 +122,7 @@ if (recordedLiveMode) {
       id: "recorded-san-francisco-public-run",
       sourceId: "21000000-0000-4000-8000-000000000008",
       collectionId: "public-san-francisco-recorded-live",
-      rowCount: 87,
+      rowCount: 86,
     },
   ]) {
     memoryStore.runs.push({
@@ -369,7 +375,7 @@ app.post("/api/runs/:sourceId", async (request, response) => {
   const sourceId = String(request.params.sourceId);
   const source = (await listSources()).find((item) => item.id === sourceId);
   if (!source) return response.status(404).json({ error: "Source not found" });
-  if (source.collectionMethod === "public_html") {
+  if (source.collectionMethod === "public_html" || source.collectionMethod === "public_api") {
     try {
       const collectionId = `public-${source.slug}-${Date.now()}`;
       const rows = await scrapePublicSource(source);

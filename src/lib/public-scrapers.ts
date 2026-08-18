@@ -30,6 +30,103 @@ async function fetchHtml(url: string) {
   return stdout;
 }
 
+type TedLocalized = Record<string, string | string[]>;
+type TedNotice = {
+  "publication-number"?: string;
+  "notice-title"?: TedLocalized;
+  "buyer-name"?: TedLocalized;
+  "form-type"?: string;
+  "deadline-receipt-tender-date-lot"?: string[];
+  "publication-date"?: string;
+  links?: { html?: Record<string, string> };
+};
+
+const localizedEnglish = (value: TedLocalized | undefined) =>
+  (() => {
+    const localized = value?.eng ?? value?.[Object.keys(value)[0] ?? ""] ?? "";
+    return Array.isArray(localized) ? localized[0] ?? "" : localized;
+  })();
+const tedDeadlineIso = (value: string) => {
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})(Z|[+-]\d{2}:\d{2})$/);
+  return match ? `${match[1]}T23:59:59${match[2]}` : value;
+};
+
+export function tedRows(notices: TedNotice[], source: SourceConfig) {
+  return notices
+    .map((notice) => {
+      const deadlines = notice["deadline-receipt-tender-date-lot"] ?? [];
+      // A notice may contain several lots. Keep it discoverable while at least
+      // one lot is still open, represented by the latest tender deadline.
+      const closingDate = tedDeadlineIso(deadlines.sort().at(-1) ?? "");
+      const publicationNumber = notice["publication-number"] ?? "";
+      return {
+        title: localizedEnglish(notice["notice-title"]),
+        solicitation_id: publicationNumber,
+        organization: localizedEnglish(notice["buyer-name"]) || "European public buyer",
+        status_raw: "Open",
+        procedure_type_raw: notice["form-type"] || "Competition",
+        published_date_raw: notice["publication-date"]
+          ? tedDeadlineIso(notice["publication-date"])
+          : undefined,
+        closing_date_raw: closingDate,
+        detail_url:
+          notice.links?.html?.ENG ||
+          (publicationNumber
+            ? `https://ted.europa.eu/en/notice/-/detail/${encodeURIComponent(publicationNumber)}`
+            : source.sourceUrl),
+        source_url: source.sourceUrl,
+      };
+    })
+    .filter(
+      (row) =>
+        row.title &&
+        row.solicitation_id &&
+        row.closing_date_raw &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+async function scrapeTedSource(source: SourceConfig, targetRows = 4_500) {
+  const fields = [
+    "publication-number",
+    "notice-title",
+    "buyer-name",
+    "form-type",
+    "deadline-receipt-tender-date-lot",
+    "publication-date",
+  ];
+  const rows: ReturnType<typeof tedRows> = [];
+  const seen = new Set<string>();
+  const limit = 250;
+  const maxPages = Math.ceil(targetRows / limit) + 4;
+
+  for (let page = 1; page <= maxPages && rows.length < targetRows; page += 1) {
+    const response = await fetch(source.inputUrl, {
+      method: "POST",
+      signal: AbortSignal.timeout(30_000),
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        query: `deadline-receipt-tender-date-lot >= ${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`,
+        fields,
+        page,
+        limit,
+        paginationMode: "PAGE_NUMBER",
+      }),
+    });
+    if (!response.ok) throw new Error(`TED search failed with HTTP ${response.status}`);
+    const payload = (await response.json()) as { notices?: TedNotice[] };
+    const pageRows = tedRows(payload.notices ?? [], source);
+    if (!pageRows.length) break;
+    for (const row of pageRows) {
+      if (seen.has(row.solicitation_id)) continue;
+      seen.add(row.solicitation_id);
+      rows.push(row);
+      if (rows.length >= targetRows) break;
+    }
+  }
+  return rows;
+}
+
 const absoluteUrl = (value: string | undefined, base: string) =>
   value ? new URL(value, base).toString() : base;
 const isOpenAtCollection = (
@@ -235,6 +332,7 @@ function sourceRequestUrl(source: SourceConfig) {
 }
 
 export async function scrapePublicSource(source: SourceConfig) {
+  if (source.slug === "eu-ted-open-notices") return scrapeTedSource(source);
   const html = await fetchHtml(sourceRequestUrl(source));
   if (source.slug === "canada-canadabuys") return canadaBuysRows(html, source);
   if (source.slug === "us-chicago-solicitations") return chicagoRows(html, source);
@@ -250,4 +348,5 @@ export const publicScraperParsers = {
   nycRows,
   montgomeryRows,
   sanFranciscoRows,
+  tedRows,
 };

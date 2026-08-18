@@ -4,6 +4,7 @@ import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 
 const captures = [
   ["canada-canadabuys", "fixtures/recorded-live/canada-canadabuys/run-live.json"],
+  ["eu-ted-open-notices", "fixtures/recorded-live/eu-ted/run-live.json"],
   ["us-chicago-solicitations", "fixtures/recorded-live/us-chicago/run-live.json"],
   ["us-nyc-current-bids", "fixtures/recorded-live/us-nyc/run-live.json"],
   ["us-montgomery-solicitations", "fixtures/recorded-live/us-montgomery/run-live.json"],

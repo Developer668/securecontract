@@ -9,7 +9,8 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 | Australian Sustainability Leaders tenders | Australia / national program | `c_msxxrkb9zckaljn0a` | 4 | Healthy / active |
 | Airports Authority of India publication index | India / AAI | `c_msxulljug99b25hby` | 234 publication rows | Warning: auxiliary index, not canonical opportunities |
 | California Community Choice Association | United States / California | `c_msxy8dx318cy3aekq5` | 1 | Healthy / active |
-| CanadaBuys open tender notices | Canada / national | Official daily CSV | 860 | Healthy / active |
+| CanadaBuys open tender notices | Canada / national | Official daily CSV | 883 | Healthy / active |
+| Tenders Electronic Daily | European Union / regional | Official TED Search API | 4,500 | Healthy / active |
 | City of Chicago active solicitations | United States / Chicago | Official public table | 25 last known good | Warning: official endpoint unavailable |
 | Current NYC bids | United States / New York City | NYC Open Data API | 88 | Healthy / active |
 | Montgomery County solicitations | United States / Maryland | dataMontgomery API | 13 | Healthy / active |
@@ -30,7 +31,7 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 1,060 accepted opportunities; the auxiliary AAI index is not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 5,583 accepted opportunities; the auxiliary AAI index is not silently promoted.
 
 ## NVIDIA NIM
 

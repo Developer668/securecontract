@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-18T04:55:56.627Z",
+  "generatedAt": "2026-08-18T15:17:45.057Z",
   "replayProvenance": "completed_live_scraper_runs",
-  "canonicalOpportunityCount": 1060,
+  "canonicalOpportunityCount": 5583,
   "sourceResults": [
     {
       "slug": "australia-asl-tenders",
@@ -26,7 +26,15 @@
       "artifact": "canada-canadabuys/run-live.json",
       "artifactKind": "completed public-page scraper run",
       "runStatus": "healthy",
-      "published": 860
+      "published": 883
+    },
+    {
+      "slug": "eu-ted-open-notices",
+      "collectorId": null,
+      "artifact": "eu-ted/run-live.json",
+      "artifactKind": "completed official public API scraper run",
+      "runStatus": "healthy",
+      "published": 4500
     },
     {
       "slug": "us-chicago-solicitations",
@@ -42,7 +50,7 @@
       "artifact": "us-nyc/run-live.json",
       "artifactKind": "completed public API scraper run",
       "runStatus": "healthy",
-      "published": 88
+      "published": 89
     },
     {
       "slug": "us-montgomery-solicitations",
