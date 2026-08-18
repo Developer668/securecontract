@@ -1,0 +1,16 @@
+name: Scheduled collection
+on:
+  schedule:
+    - cron: '17 */12 * * *'
+  workflow_dispatch:
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger protected collection endpoint
+        run: |
+          test -n "$APP_URL" && test -n "$CRON_SECRET"
+          curl --fail --retry 3 -X POST "$APP_URL/api/cron/collect" -H "Authorization: Bearer $CRON_SECRET"
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-08-18T03:33:35.640Z",
+  "replayProvenance": "completed_bright_data_dataset_run",
+  "canonicalOpportunityCount": 5,
+  "sourceResults": [
+    {
+      "slug": "australia-asl-tenders",
+      "collectorId": "c_msxxrkb9zckaljn0a",
+      "artifact": "australia-asl/run-v3.json",
+      "artifactKind": "completed custom collector dataset run",
+      "runStatus": "healthy",
+      "published": 4
+    },
+    {
+      "slug": "california-cca-procurement",
+      "collectorId": "c_msxy8dx318cy3aekq5",
+      "artifact": "california-cca/post-heal-v3.json",
+      "artifactKind": "completed post-heal custom collector dataset run",
+      "runStatus": "healthy",
+      "published": 1,
+      "archivedShape": "one immutable wrapper row; flattened after archival"
+    },
+    {
+      "slug": "india-aai-publications",
+      "collectorId": "c_msxulljug99b25hby",
+      "artifact": "india-aai/post-heal.json",
+      "artifactKind": "completed post-heal dataset run",
+      "rows": 234,
+      "contractValidRows": 234,
+      "promotedToOpportunities": false
+    }
+  ]
+}
