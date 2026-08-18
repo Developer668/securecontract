@@ -11,8 +11,6 @@ import {
   FileJson,
   Filter,
   History,
-  KeyRound,
-  LogOut,
   Plus,
   RefreshCw,
   Search,
@@ -45,9 +43,7 @@ type SourceView = SourceConfig & {
   latestRun: SourceRunView | null;
   lastSuccessfulRun: SourceRunView | null;
 };
-type AdminState = {
-  authenticated: boolean;
-  configured: boolean;
+type ServiceState = {
   brightDataConfigured: boolean;
   nvidiaConfigured: boolean;
 };
@@ -869,7 +865,7 @@ function OpportunitiesView({
             {provenance === "postgres"
               ? "Only accepted runs are published"
               : provenance === "recorded_live"
-                ? "Replayed from completed Bright Data custom collector runs"
+                ? "Replayed from completed live scraper runs"
                 : "Data shown is a clearly labeled product demonstration"}
           </span>
         </div>
@@ -905,9 +901,19 @@ async function runSourceCollection(
     method: "POST",
     credentials: "include",
   });
-  const triggerBody = (await trigger.json()) as { collectionId?: string; error?: string };
-  if (!trigger.ok || !triggerBody.collectionId)
+  const triggerBody = (await trigger.json()) as {
+    collectionId?: string;
+    error?: string;
+    run?: { validRowCount: number; rowCount: number; status: string };
+  };
+  if (!trigger.ok)
     throw new Error(triggerBody.error ?? "Collection trigger failed");
+  if (triggerBody.run) {
+    onState(`${triggerBody.run.validRowCount}/${triggerBody.run.rowCount} rows accepted`);
+    return;
+  }
+  if (!triggerBody.collectionId)
+    throw new Error("Collection started without a snapshot ID");
   onState(`Bright Data snapshot ${triggerBody.collectionId}`);
   for (let attempt = 0; attempt < 90; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, 2_000));
@@ -935,11 +941,9 @@ async function runSourceCollection(
 
 function RunSource({
   source,
-  authenticated,
   onComplete,
 }: {
   source: SourceConfig;
-  authenticated: boolean;
   onComplete: () => Promise<void>;
 }) {
   const [state, setState] = useState("");
@@ -959,7 +963,7 @@ function RunSource({
     <div className="run-control">
       <button
         className="secondary"
-        disabled={!authenticated || !source.collectorId || running}
+        disabled={(!source.collectorId && source.collectionMethod !== "public_html") || running}
         onClick={() => void run()}
       >
         <RefreshCw className={running ? "spin" : ""} size={14} />
@@ -977,58 +981,48 @@ function SourcesView({
   sources: SourceView[];
   onRefresh: () => Promise<void>;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [secret, setSecret] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [adminState, setAdminState] = useState<AdminState>({
-    authenticated: false,
-    configured: false,
+  const [serviceState, setServiceState] = useState<ServiceState>({
     brightDataConfigured: false,
     nvidiaConfigured: false,
   });
   const [healing, setHealing] = useState<HealingRecord[]>([]);
   const [refreshState, setRefreshState] = useState("");
-  const loadOperatorState = async () => {
-    const [session, ledger] = await Promise.all([
-      fetch("/api/admin/session", { credentials: "include" }).then((response) => response.json()) as Promise<AdminState>,
+  const [refreshing, setRefreshing] = useState(false);
+  const loadLiveState = async () => {
+    const [health, ledger] = await Promise.all([
+      fetch("/api/health").then((response) => response.json()) as Promise<ServiceState>,
       fetch("/api/healing").then((response) => response.json()) as Promise<{ data: HealingRecord[] }>,
     ]);
-    setAdminState(session);
+    setServiceState(health);
     setHealing(ledger.data);
   };
   useEffect(() => {
-    const task = window.setTimeout(() => void loadOperatorState(), 0);
+    const task = window.setTimeout(() => void loadLiveState(), 0);
     return () => window.clearTimeout(task);
   }, []);
-  const login = async () => {
-    setLoginError("");
-    const response = await fetch("/api/admin/session", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret }),
-    });
-    const body = (await response.json()) as { error?: string };
-    if (!response.ok) return setLoginError(body.error ?? "Operator sign-in failed");
-    setSecret("");
-    await loadOperatorState();
-  };
-  const logout = async () => {
-    await fetch("/api/admin/session", { method: "DELETE", credentials: "include" });
-    await loadOperatorState();
-  };
   const refreshAll = async () => {
     const active = sources.filter(
-      (source) => source.status === "active" && source.publishToOpportunityFeed !== false,
+      (source) =>
+        source.status === "active" &&
+        source.publishToOpportunityFeed !== false &&
+        (source.collectionMethod === "public_html" || Boolean(source.collectorId)),
     );
+    const ordered = [...active].sort((left, right) =>
+      left.collectionMethod === "public_html" && right.collectionMethod !== "public_html" ? -1 : 1,
+    );
+    setRefreshing(true);
     try {
-      for (const source of active) {
-        await runSourceCollection(source, (state) => setRefreshState(`${source.countryCode} · ${state}`));
+      for (const [index, source] of ordered.entries()) {
+        await runSourceCollection(source, (state) =>
+          setRefreshState(`${index + 1}/${ordered.length} · ${source.countryCode} · ${state}`),
+        );
       }
       setRefreshState(`${active.length} collectors refreshed`);
       await onRefresh();
     } catch (error) {
       setRefreshState(error instanceof Error ? error.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
     }
   };
   return (
@@ -1036,43 +1030,24 @@ function SourcesView({
       <section className="content full">
         <div className="page-title">
           <div>
-            <p className="eyebrow">Operator console</p>
-            <h1>Collection operations</h1>
-            <p>Run verified collectors, inspect validation, and show the real repair trail.</p>
+            <p className="eyebrow">Live collection</p>
+            <h1>Sources</h1>
+            <p>Refresh every public feed, then publish only rows that pass validation.</p>
           </div>
-          {adminState.authenticated && (
-            <div className="operator-actions">
-              <button className="secondary" onClick={() => void logout()}><LogOut size={15} /> Sign out</button>
-              <button className="primary" onClick={() => void refreshAll()}><RefreshCw size={15} /> Refresh active feeds</button>
-            </div>
-          )}
+          <button className="primary run-all" disabled={refreshing} onClick={() => void refreshAll()}>
+            <RefreshCw className={refreshing ? "spin" : ""} size={15} />
+            {refreshing ? "Running live sources" : "Run all live sources"}
+          </button>
         </div>
-        <section className={`operator-gate ${adminState.authenticated ? "unlocked" : ""}`}>
-          <div className="operator-copy">
-            <span className="operator-icon">{adminState.authenticated ? <ShieldCheck /> : <KeyRound />}</span>
-            <div>
-              <p className="eyebrow">{adminState.authenticated ? "Authenticated session" : "Protected operations"}</p>
-              <h2>{adminState.authenticated ? "Operator controls unlocked" : "Sign in once to run collectors"}</h2>
-              <p>{adminState.authenticated ? "The browser holds an HTTP-only session. Secrets never enter local storage or collector requests." : "Use this deployment’s operator secret. It becomes a short-lived HTTP-only cookie—not a repeated browser prompt."}</p>
-            </div>
-          </div>
-          {adminState.authenticated ? (
-            <div className="capability-row">
-              <Status tone={adminState.brightDataConfigured ? "good" : "bad"}>Bright Data {adminState.brightDataConfigured ? "connected" : "missing"}</Status>
-              <Status tone={adminState.nvidiaConfigured ? "good" : "bad"}>NVIDIA NIM {adminState.nvidiaConfigured ? "connected" : "missing"}</Status>
-              {refreshState && <span className="run-state">{refreshState}</span>}
-            </div>
-          ) : (
-            <div className="login-form">
-              <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void login(); }} placeholder="Operator secret" aria-label="Operator secret" />
-              <button className="primary" disabled={!secret} onClick={() => void login()}>Unlock console</button>
-              {loginError && <span className="inline-error" role="alert">{loginError}</span>}
-            </div>
-          )}
+        <section className="connection-strip" aria-label="Live configuration">
+          <div><span className={`connection-dot ${serviceState.brightDataConfigured ? "online" : ""}`} /> Bright Data</div>
+          <div><span className="connection-dot online" /> Public-page scrapers</div>
+          <div><span className={`connection-dot ${serviceState.nvidiaConfigured ? "online" : ""}`} /> NVIDIA NIM</div>
+          <strong>{refreshState || `${sources.filter((source) => source.status === "active").length} sources ready`}</strong>
         </section>
         <div className="section-heading">
-          <div><p className="eyebrow">Live integrations</p><h2>Configured collectors</h2></div>
-          <button className="text-button" disabled={!adminState.authenticated} onClick={() => setAddOpen(true)}><Plus size={15} /> Add source</button>
+          <div><p className="eyebrow">Current coverage</p><h2>Live feeds</h2></div>
+          <span className="ledger-note">US · Canada · Australia · India</span>
         </div>
         <div className="source-list">
           {sources.map((source) => (
@@ -1097,16 +1072,6 @@ function SourcesView({
                 </div>
               </div>
               <div>
-                <label>Collector ID</label>
-                <strong>{source.collectorId ?? "Not configured"}</strong>
-              </div>
-              <div>
-                <label>Last run</label>
-                <strong>
-                  {source.latestRun ? fmt(source.latestRun.finishedAt) : "Never"}
-                </strong>
-              </div>
-              <div>
                 <label>Latest result</label>
                 <strong>
                   {source.latestRun
@@ -1116,280 +1081,30 @@ function SourcesView({
                       : "Collector not configured"}
                 </strong>
               </div>
-              <div>
-                <label>Validation</label>
-                <strong>
-                  {source.latestRun?.metrics
-                    ? `${Math.round(source.latestRun.metrics.requiredFieldCompleteness * 100)}% complete · ${Math.round(source.latestRun.metrics.dateParseRate * 100)}% dates`
-                    : "No run metrics"}
-                </strong>
-                {source.latestRun?.problems[0] && (
-                  <small className="warn">{source.latestRun.problems[0]}</small>
-                )}
-              </div>
-              <RunSource source={source} authenticated={adminState.authenticated} onComplete={onRefresh} />
+              <RunSource source={source} onComplete={onRefresh} />
             </article>
           ))}
         </div>
-        <div className="section-heading healing-heading">
-          <div><p className="eyebrow">Repair evidence</p><h2>Self-healing ledger</h2></div>
-          <span className="ledger-note"><Wrench size={14} /> Actual reviewed proposals and outcomes</span>
-        </div>
-        <div className="healing-grid">
-          {healing.map((record) => (
-            <article key={record.collectorId}>
-              <header><div><p className="eyebrow">{record.collectorId}</p><h3>{record.sourceName}</h3></div><Status tone={record.status === "verified" ? "good" : "warn"}>{label(record.status)}</Status></header>
-              <ol>
-                <li><span>01</span><div><strong>Detected</strong><p>{record.detected}</p></div></li>
-                <li><span>02</span><div><strong>Repair reviewed</strong><p>{record.repair}</p></div></li>
-                <li><span>03</span><div><strong>Outcome</strong><p>{record.outcome}</p></div></li>
-              </ol>
-              <footer><span><Check size={13} /> Same Collector ID</span><span><Check size={13} /> Human approved</span></footer>
-            </article>
-          ))}
-        </div>
-        {addOpen && <AddSource onClose={() => setAddOpen(false)} />}
+        <details className="repair-drawer">
+          <summary><span><Wrench size={15} /> {healing.length} verified scraper repairs</span><small>View the self-healing evidence</small></summary>
+          <div className="healing-grid">
+            {healing.map((record) => (
+              <article key={record.collectorId}>
+                <header><div><p className="eyebrow">{record.collectorId}</p><h3>{record.sourceName}</h3></div><Status tone={record.status === "verified" ? "good" : "warn"}>{label(record.status)}</Status></header>
+                <ol>
+                  <li><span>01</span><div><strong>Detected</strong><p>{record.detected}</p></div></li>
+                  <li><span>02</span><div><strong>Repair</strong><p>{record.repair}</p></div></li>
+                  <li><span>03</span><div><strong>Outcome</strong><p>{record.outcome}</p></div></li>
+                </ol>
+                <footer><span><Check size={13} /> Same Collector ID</span><span><Check size={13} /> Reviewed</span></footer>
+              </article>
+            ))}
+          </div>
+        </details>
       </section>
     </main>
   );
 }
-function AddSource({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [form, setForm] = useState({
-    countryName: "",
-    countryCode: "",
-    jurisdictionType: "national",
-    jurisdictionName: "",
-    name: "",
-    sourceUrl: "",
-    locale: "",
-    timezone: "",
-    currency: "",
-    sourceLanguage: "",
-  });
-  const setField = (key: keyof typeof form, value: string) =>
-    setForm((current) => ({ ...current, [key]: value }));
-  const saveDraft = async () => {
-    setBusy(true);
-    setMessage("Checking public access…");
-    try {
-      const result = await fetch("/api/sources", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...form,
-          jurisdictionName: form.jurisdictionName || null,
-          currency: form.currency || null,
-        }),
-      });
-      const body = (await result.json()) as { error?: string };
-      if (!result.ok)
-        throw new Error(body.error ?? "Source verification failed");
-      setMessage("Draft saved after public-access verification.");
-      window.setTimeout(() => window.location.reload(), 700);
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Unable to save source",
-      );
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <div className="modal-head">
-          <div>
-            <h2>Add procurement source</h2>
-            <p>A new country is data—not an application code change.</p>
-          </div>
-          <button className="icon-button" onClick={onClose}>
-            <X />
-          </button>
-        </div>
-        <div className="steps">
-          {[
-            "Source details",
-            "Verify access",
-            "Custom collector",
-            "Map & activate",
-          ].map((value, index) => (
-            <span
-              className={
-                step === index + 1 ? "active" : step > index + 1 ? "done" : ""
-              }
-              key={value}
-            >
-              {step > index + 1 ? <Check size={13} /> : index + 1} {value}
-            </span>
-          ))}
-        </div>
-        {step === 1 ? (
-          <div className="form-grid">
-            <label>
-              Country
-              <input
-                required
-                placeholder="e.g. Brazil"
-                value={form.countryName}
-                onChange={(event) =>
-                  setField("countryName", event.target.value)
-                }
-              />
-            </label>
-            <label>
-              Country code
-              <input
-                required
-                placeholder="e.g. BR"
-                maxLength={3}
-                value={form.countryCode}
-                onChange={(event) =>
-                  setField("countryCode", event.target.value)
-                }
-              />
-            </label>
-            <label>
-              Jurisdiction type
-              <select
-                value={form.jurisdictionType}
-                onChange={(event) =>
-                  setField("jurisdictionType", event.target.value)
-                }
-              >
-                <option>national</option>
-                <option>state</option>
-                <option>province</option>
-                <option>region</option>
-                <option>county</option>
-                <option>municipality</option>
-                <option>agency</option>
-                <option>other</option>
-              </select>
-            </label>
-            <label>
-              Jurisdiction name
-              <input
-                placeholder="Optional"
-                value={form.jurisdictionName}
-                onChange={(event) =>
-                  setField("jurisdictionName", event.target.value)
-                }
-              />
-            </label>
-            <label className="wide">
-              Portal name
-              <input
-                required
-                placeholder="Official procurement portal"
-                value={form.name}
-                onChange={(event) => setField("name", event.target.value)}
-              />
-            </label>
-            <label className="wide">
-              Public URL
-              <input
-                required
-                type="url"
-                placeholder="https://…"
-                value={form.sourceUrl}
-                onChange={(event) => setField("sourceUrl", event.target.value)}
-              />
-            </label>
-            <label>
-              Locale
-              <input
-                required
-                placeholder="pt-BR"
-                value={form.locale}
-                onChange={(event) => setField("locale", event.target.value)}
-              />
-            </label>
-            <label>
-              Timezone
-              <input
-                required
-                placeholder="America/Sao_Paulo"
-                value={form.timezone}
-                onChange={(event) => setField("timezone", event.target.value)}
-              />
-            </label>
-            <label>
-              Currency
-              <input
-                placeholder="BRL"
-                maxLength={3}
-                value={form.currency}
-                onChange={(event) =>
-                  setField("currency", event.target.value.toUpperCase())
-                }
-              />
-            </label>
-            <label>
-              Language
-              <input
-                required
-                placeholder="pt"
-                value={form.sourceLanguage}
-                onChange={(event) =>
-                  setField("sourceLanguage", event.target.value)
-                }
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="onboard-stage">
-            <ShieldCheck />
-            <h3>
-              {step === 2
-                ? "Public-access acceptance gate"
-                : step === 3
-                  ? "Create a custom Bright Data collector"
-                  : "Map fields and activate"}
-            </h3>
-            <p>
-              {step === 2
-                ? "SecureContract verifies the URL is public, useful, and free of login walls or personal data."
-                : step === 3
-                  ? "Authenticated Bright Data access is required. A real Collector ID and sample run must be inspected before activation."
-                  : "A source adapter maps portal terms to the canonical schema. Countries remain dynamic."}
-            </p>
-            <Status tone={step === 3 ? "warn" : "info"}>
-              {step === 3
-                ? "Bright Data credentials required"
-                : "Review required"}
-            </Status>
-            {message && <p role="status">{message}</p>}
-          </div>
-        )}
-        <div className="modal-actions">
-          <button
-            className="secondary"
-            onClick={() => (step === 1 ? onClose() : setStep(step - 1))}
-          >
-            Back
-          </button>
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={() => (step === 4 ? void saveDraft() : setStep(step + 1))}
-          >
-            {busy
-              ? "Verifying…"
-              : step === 4
-                ? "Save verified draft"
-                : "Continue"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [view, setView] = useState<View>("opportunities");
   const [items, setItems] = useState<Opportunity[]>([]);

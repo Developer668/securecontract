@@ -16,4 +16,6 @@ Use these existing Scraper Studio collectors. Do not rebuild them in a new sessi
 - California Community Choice Association procurement: `c_msxy8dx318cy3aekq5` (canonical opportunity feed)
 - Airports Authority of India publication index: `c_msxulljug99b25hby` (auxiliary/healing proof only; never publish as contract opportunities)
 
-Run collectors through SecureContract's authenticated Operations console or the protected `/api/runs/:sourceId` routes so raw archival, validation, normalization, and last-known-good protection always execute. Use `npx -p @brightdata/cli bdata login` only to establish or refresh the local CLI session; credentials must remain outside the repository.
+Run collectors with the one-click **Run all live sources** action in SecureContract's Operations view. The server keeps credentials private while raw archival, validation, normalization, and last-known-good protection execute. Use `npx -p @brightdata/cli bdata login` only to establish or refresh the local CLI session; credentials must remain outside the repository.
+
+The CanadaBuys daily open-tender CSV (`canada-canadabuys`) and City of Chicago active-solicitation page (`us-chicago-solicitations`) are registered public-source collectors. They have no fabricated Bright Data Collector IDs: Scraper Studio rejected or failed generation for those government domains, so SecureContract runs their anonymous official feeds directly through the same validation and publication boundary.

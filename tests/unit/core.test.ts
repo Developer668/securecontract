@@ -5,6 +5,8 @@ import { buildCopilotContext } from '../../src/lib/ai/context';
 import { adapterFor } from '../../src/lib/sources';
 import { assertPublicHttpUrl } from '../../src/lib/security';
 import { opportunities, sources } from '../../src/data/demo';
+import { liveSources } from '../../src/data/live-sources';
+import { publicScraperParsers } from '../../src/lib/public-scrapers';
 
 describe('normalization',()=>{
   it('normalizes conservatively',()=>{expect(normalizeStatus('Open Tender')).toBe('open');expect(normalizeStatus('mystery')).toBe('unknown');expect(normalizeProcedure('RFP')).toBe('request_for_proposal');});
@@ -22,3 +24,15 @@ describe('open-ended sources',()=>{
 });
 describe('copilot grounding',()=>it('contains evidence and explicit missing-data rules',()=>{const context=buildCopilotContext(opportunities[0]);expect(context.evidence.length).toBeGreaterThan(0);expect(context.rules.join(' ')).toContain('absent');}));
 describe('source URL security',()=>it('blocks private targets',()=>{expect(()=>assertPublicHttpUrl('http://127.0.0.1/admin')).toThrow(/Private/);expect(assertPublicHttpUrl('https://example.gov/tenders').hostname).toBe('example.gov');}));
+describe('public source parsers',()=>{
+  it('maps CanadaBuys open-tender CSV without contact fields',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='canada-canadabuys')!;
+    const csv='title-titre-eng,solicitationNumber-numeroSollicitation,referenceNumber-numeroReference,contractingEntityName-nomEntitContractante-eng,tenderStatus-appelOffresStatut-eng,publicationDate-datePublication,tenderClosingDate-appelOffresDateCloture,noticeURL-URLavis-eng\n"Road services","CA-1","cb-1","Public Works","Open","2026/08/17","2026/09/01",""';
+    expect(publicScraperParsers.canadaBuysRows(csv,source)[0]).toMatchObject({title:'Road services',solicitation_id:'CA-1',organization:'Public Works',detail_url:'https://canadabuys.canada.ca/en/tender-opportunities/tender-notice/cb-1'});
+  });
+  it('maps Chicago solicitation table rows',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='us-chicago-solicitations')!;
+    const html='<table><tbody><tr><td>CITY</td><td>RFP</td><td>CHI-1</td><td>Technology services</td><td>Open</td><td>08/17/2026</td><td>09/01/2026</td><td><a href="/vcsearch/solicitations/1">View</a></td></tr></tbody></table>';
+    expect(publicScraperParsers.chicagoRows(html,source)[0]).toMatchObject({title:'Technology services',solicitation_id:'CHI-1',organization:'City of Chicago'});
+  });
+});

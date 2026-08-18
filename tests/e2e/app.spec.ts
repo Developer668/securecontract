@@ -20,12 +20,12 @@ test("core opportunity workflow", async ({ page }) => {
   await expect(page.getByText("Evidence in scope")).toBeVisible();
 });
 
-test("filters, source health, and onboarding", async ({ page }) => {
+test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Country filter").selectOption("AU");
   await expect(page.getByText("Capacity Investment Scheme NEM Dispatchable").first()).toBeVisible();
   await page.getByRole("button", { name: "Operations" }).click();
-  await expect(page.getByRole("heading", { name: "Collection operations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sources", exact: true })).toBeVisible();
   const response = await page.request.get("/api/sources");
   expect(response.ok()).toBe(true);
   const body = (await response.json()) as {
@@ -34,12 +34,10 @@ test("filters, source health, and onboarding", async ({ page }) => {
   const asl = body.data.find((source) => source.slug === "australia-asl-tenders");
   expect(asl?.latestRun?.validRowCount).toBe(4);
   expect(asl?.latestRun?.metrics.dateParseRate).toBe(1);
-  await expect(page.getByRole("button", { name: "Add source" })).toBeDisabled();
-  await page.getByLabel("Operator secret").fill("local-verification");
-  await page.getByRole("button", { name: "Unlock console" }).click();
-  await expect(page.getByText("Operator controls unlocked")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Self-healing ledger" })).toBeVisible();
-  await expect(page.getByText(/234 valid rows/).first()).toBeVisible();
-  await page.getByRole("button", { name: "Add source" }).click();
-  await expect(page.getByText("A new country is data")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run all live sources" })).toBeEnabled();
+  await expect(page.getByText("CanadaBuys tender opportunities")).toBeVisible();
+  await expect(page.getByText("City of Chicago active solicitations")).toBeVisible();
+  await expect(page.getByText("25 rows · 25 valid")).toHaveCount(2);
+  await expect(page.getByText("2 verified scraper repairs")).toBeVisible();
+  await expect(page.getByLabel("Operator secret")).toHaveCount(0);
 });

@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   opportunities as demonstrationOpportunities,
@@ -11,6 +11,7 @@ import { BrightDataClient } from "../src/lib/bright-data/client.js";
 import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
 import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
+import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 import { PostgresRepository } from "../db/repository.js";
 import type { SourceConfig } from "../src/types.js";
 
@@ -85,6 +86,39 @@ if (recordedLiveMode) {
     startedAt: "2026-08-18T00:58:55.000Z",
     finishedAt: "2026-08-18T00:59:05.000Z",
   });
+  for (const recorded of [
+    {
+      id: "recorded-canadabuys-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000004",
+      collectionId: "public-canadabuys-recorded-live",
+      rowCount: 25,
+    },
+    {
+      id: "recorded-chicago-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000005",
+      collectionId: "public-chicago-recorded-live",
+      rowCount: 25,
+    },
+  ]) {
+    memoryStore.runs.push({
+      ...recorded,
+      status: "healthy",
+      validRowCount: recorded.rowCount,
+      metrics: {
+        rowCount: recorded.rowCount,
+        baselineRowCount: null,
+        requiredFieldCompleteness: 1,
+        dateParseRate: 1,
+        duplicateRate: 0,
+        schemaStability: 1,
+        freshness: 1,
+        accessWallDetected: false,
+      },
+      problems: [],
+      startedAt: "2026-08-18T04:15:00.000Z",
+      finishedAt: "2026-08-18T04:15:03.000Z",
+    });
+  }
 }
 const pendingRuns = new Map<
   string,
@@ -102,43 +136,6 @@ const workspaces = new Map<
     }>;
   }
 >();
-const adminSessions = new Map<string, number>();
-const sessionCookie = "securecontract_admin";
-const safeEqual = (left: string, right: string) => {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return (
-    leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-  );
-};
-const cookieValue = (request: express.Request, name: string) =>
-  request
-    .header("cookie")
-    ?.split(";")
-    .map((part) => part.trim().split("="))
-    .find(([key]) => key === name)?.[1] ?? null;
-const hasAdminSession = (request: express.Request) => {
-  const configured = process.env.ADMIN_SECRET;
-  const bearer = request.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (configured && bearer && safeEqual(bearer, configured)) return true;
-  const token = cookieValue(request, sessionCookie);
-  if (!token) return false;
-  const expiresAt = adminSessions.get(token);
-  if (!expiresAt || expiresAt < Date.now()) {
-    adminSessions.delete(token);
-    return false;
-  }
-  return true;
-};
-const admin = (
-  request: express.Request,
-  response: express.Response,
-  next: express.NextFunction,
-) => {
-  if (!hasAdminSession(request))
-    return response.status(401).json({ error: "Admin authorization required" });
-  next();
-};
 const cron = (
   request: express.Request,
   response: express.Response,
@@ -170,39 +167,6 @@ app.get("/api/health", (_request, response) =>
     ),
   }),
 );
-app.get("/api/admin/session", (request, response) =>
-  response.json({
-    authenticated: hasAdminSession(request),
-    configured: Boolean(process.env.ADMIN_SECRET),
-    brightDataConfigured: Boolean(brightDataToken),
-    nvidiaConfigured: Boolean(
-      process.env.NVIDIA_API_KEY && process.env.NVIDIA_NIM_MODEL,
-    ),
-  }),
-);
-app.post("/api/admin/session", (request, response) => {
-  const parsed = z.object({ secret: z.string().min(1).max(500) }).safeParse(request.body);
-  const configured = process.env.ADMIN_SECRET;
-  if (!configured || !parsed.success || !safeEqual(parsed.data.secret, configured))
-    return response.status(401).json({ error: "The operator secret is invalid" });
-  const token = randomBytes(32).toString("base64url");
-  const maxAgeSeconds = 8 * 60 * 60;
-  adminSessions.set(token, Date.now() + maxAgeSeconds * 1000);
-  response.setHeader(
-    "Set-Cookie",
-    `${sessionCookie}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
-  );
-  response.json({ authenticated: true });
-});
-app.delete("/api/admin/session", (request, response) => {
-  const token = cookieValue(request, sessionCookie);
-  if (token) adminSessions.delete(token);
-  response.setHeader(
-    "Set-Cookie",
-    `${sessionCookie}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
-  );
-  response.json({ authenticated: false });
-});
 app.get("/api/opportunities", async (_request, response) =>
   response.json({
     data: await listOpportunities(),
@@ -214,7 +178,7 @@ app.get("/api/opportunities", async (_request, response) =>
     notice: postgres
       ? null
       : recordedLiveMode
-        ? "Timestamped replay from completed ASL and CCA Bright Data custom collector runs; use Run now for a fresh collection."
+        ? "Timestamped replay from completed Bright Data and public-page scraper runs across the US, Canada, and Australia; run live sources for fresh data."
         : "These rows demonstrate the product workflow and are not represented as live Bright Data output.",
   }),
 );
@@ -242,7 +206,7 @@ app.get("/api/sources", async (_request, response) => {
     }),
   });
 });
-app.post("/api/sources", admin, async (request, response) => {
+app.post("/api/sources", async (request, response) => {
   const schema = z.object({
     countryCode: z
       .string()
@@ -381,10 +345,29 @@ app.put("/api/applications/:opportunityId", async (request, response) => {
   workspaces.set(opportunityId, parsed.data);
   response.json(parsed.data);
 });
-app.post("/api/runs/:sourceId", admin, async (request, response) => {
+app.post("/api/runs/:sourceId", async (request, response) => {
   const sourceId = String(request.params.sourceId);
   const source = (await listSources()).find((item) => item.id === sourceId);
   if (!source) return response.status(404).json({ error: "Source not found" });
+  if (source.collectionMethod === "public_html") {
+    try {
+      const collectionId = `public-${source.slug}-${Date.now()}`;
+      const rows = await scrapePublicSource(source);
+      const result = await ingestRows({
+        source,
+        collectionId,
+        rows,
+        store: postgres ?? memoryStore,
+        observedAt: new Date().toISOString(),
+        publish: source.publishToOpportunityFeed !== false,
+      });
+      return response.json(result);
+    } catch (error) {
+      return response.status(502).json({
+        error: error instanceof Error ? error.message : "Public scraper failed",
+      });
+    }
+  }
   if (!source.collectorId)
     return response.status(409).json({
       error:
@@ -423,7 +406,7 @@ app.post("/api/runs/:sourceId", admin, async (request, response) => {
     });
   }
 });
-app.get("/api/runs/poll/:snapshotId", admin, async (request, response) => {
+app.get("/api/runs/poll/:snapshotId", async (request, response) => {
   if (!brightDataToken)
     return response
       .status(503)

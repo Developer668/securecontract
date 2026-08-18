@@ -17,10 +17,13 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed-sources.ts",
     "replay:build": "tsx scripts/build-recorded-replay.ts",
+    "capture:public": "tsx scripts/capture-public-sources.ts",
     "verify:nim": "tsx --env-file=.env.local scripts/verify-nim.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "cheerio": "^1.2.0",
+    "csv-parse": "^7.0.2",
     "date-fns": "latest",
     "date-fns-tz": "latest",
     "drizzle-orm": "latest",

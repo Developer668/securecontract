@@ -9,6 +9,8 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 | Australian Sustainability Leaders tenders | Australia / national program | `c_msxxrkb9zckaljn0a` | 4 | Healthy / active |
 | Airports Authority of India publication index | India / AAI | `c_msxulljug99b25hby` | 234 publication rows | Warning: auxiliary index, not canonical opportunities |
 | California Community Choice Association | United States / California | `c_msxy8dx318cy3aekq5` | 1 | Healthy / active |
+| CanadaBuys open tender notices | Canada / national | Official daily CSV | 25 | Healthy / active |
+| City of Chicago active solicitations | United States / Chicago | Official public table | 25 | Healthy / active |
 
 ## Bright Data
 
@@ -25,7 +27,7 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, workspace persistence, authenticated operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains only the accepted ASL and CCA completed datasets; the auxiliary AAI index is not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains accepted ASL, CCA, CanadaBuys, and Chicago runs; the auxiliary AAI index is not silently promoted.
 
 ## NVIDIA NIM
 
@@ -37,7 +39,7 @@ The server-only provider, grounded context pack, structured output validation, c
 |---|---|
 | Lint | PASS |
 | Typecheck | PASS |
-| Unit/contract/integration tests | PASS — 19 tests |
+| Unit/contract/integration tests | PASS — 21 tests |
 | Desktop/mobile E2E | PASS — 4 tests |
 | Safari visual verification | PASS |
 | Live NVIDIA NIM verification | PASS |
@@ -45,4 +47,4 @@ The server-only provider, grounded context pack, structured output validation, c
 
 ## Internal release score
 
-`100 / 100` for the defined hackathon readiness ledger. Live collector execution, reviewed healing evidence, authenticated operations, grounded NIM inference, Safari QA, desktop/mobile E2E, and the production build all pass.
+`100 / 100` for the defined hackathon readiness ledger. Live collector execution, reviewed healing evidence, no-login one-click operations, grounded NIM inference, Safari QA, desktop/mobile E2E, and the production build all pass.

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-18T03:33:35.640Z",
-  "replayProvenance": "completed_bright_data_dataset_run",
-  "canonicalOpportunityCount": 5,
+  "generatedAt": "2026-08-18T04:31:19.168Z",
+  "replayProvenance": "completed_live_scraper_runs",
+  "canonicalOpportunityCount": 46,
   "sourceResults": [
     {
       "slug": "australia-asl-tenders",
@@ -19,6 +19,22 @@
       "runStatus": "healthy",
       "published": 1,
       "archivedShape": "one immutable wrapper row; flattened after archival"
+    },
+    {
+      "slug": "canada-canadabuys",
+      "collectorId": null,
+      "artifact": "canada-canadabuys/run-live.json",
+      "artifactKind": "completed public-page scraper run",
+      "runStatus": "healthy",
+      "published": 25
+    },
+    {
+      "slug": "us-chicago-solicitations",
+      "collectorId": null,
+      "artifact": "us-chicago/run-live.json",
+      "artifactKind": "completed public-page scraper run",
+      "runStatus": "healthy",
+      "published": 25
     },
     {
       "slug": "india-aai-publications",

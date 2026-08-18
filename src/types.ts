@@ -10,6 +10,7 @@ export interface SourceConfig {
   adapterKey: string; status: 'draft' | 'active' | 'warning' | 'degraded' | 'disabled';
   requiredFields: string[]; publicAccessVerifiedAt: string | null; prebuiltLibraryCheckedAt: string | null;
   publishToOpportunityFeed?: boolean;
+  collectionMethod?: 'bright_data' | 'public_html';
 }
 
 export interface FieldEvidence {

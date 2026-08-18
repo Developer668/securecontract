@@ -424,6 +424,8 @@ export const sourceAdapters: Record<string, SourceAdapter> = {
   "australia-asl-tenders": procurementListingAdapter,
   "california-orange-opengov": procurementListingAdapter,
   "california-cca-procurement": procurementListingAdapter,
+  "canada-canadabuys": procurementListingAdapter,
+  "us-chicago-solicitations": procurementListingAdapter,
 };
 export function adapterFor(key: string) {
   return sourceAdapters[key] ?? declarativeAdapter;

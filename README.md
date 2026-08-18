@@ -4,16 +4,15 @@
 
 SecureContract is a self-healing, evidence-grounded public-procurement intelligence product. It is designed to turn structurally different public portals into one canonical opportunity stream while preserving what the government site and scraper actually said.
 
-The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. AAI has a completed 234-row post-heal publication-index run, ASL has a completed 4-row per-opportunity run, and CCA has a completed 1-row post-heal run. Live collection through the product and live NVIDIA NIM inference are both verified.
+The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay contains 46 current opportunities from Australia, Canada, and the United States. Live collection through the product and live NVIDIA NIM inference are both verified.
 
 ## Why this exists
 
 Procurement portals vary by jurisdiction, terminology, dates, pagination, and access behavior. A scraper failure can look like a real business event: zero rows may be mistaken for every contract closing. SecureContract creates a reliability boundary that archives raw rows, validates a run before publication, normalizes additively, stores field-level provenance, versions material changes, and preserves the last known-good state when extraction becomes unreliable.
 
 ```text
-Government portals
-   ↓
-Bright Data Scraper Studio
+Government portals and official open-data feeds
+   ↓ Bright Data collectors or registered public-source adapters
    ↓
 Raw immutable data
    ↓
@@ -32,7 +31,7 @@ SecureContract
 
 - **Discover** — searchable canonical feed with dynamic country and source choices.
 - **Opportunity detail** — Overview, Evidence, Changes, Raw, Workspace, and Copilot views.
-- **Operations** — authenticated collector runs, current validation, integration readiness, and the reviewed self-healing ledger.
+- **Operations** — one-click collector runs, current validation, compact integration readiness, and an expandable self-healing ledger.
 - **Workspace** — preparation status, tasks, notes persistence, and explicit readiness boundaries.
 - **Copilot** — a dedicated NVIDIA NIM studio scoped to the selected opportunity's collected evidence.
 
@@ -69,7 +68,9 @@ When a run is rejected, SecureContract does not replace accepted opportunities o
 3. poll `GET /dca/dataset?id=j_…` with bounded exponential backoff;
 4. archive rows before validation and normalization.
 
-The Bright Data token is never sent to the browser. An operator signs in once with `ADMIN_SECRET`; the server exchanges it for an eight-hour, HTTP-only, SameSite=Strict session cookie. Bearer authentication remains available for automation and cron. Source URLs are restricted to public HTTP(S) targets and reject embedded credentials, localhost, and private-network IPs.
+The Bright Data token is never sent to the browser. A user can run every configured source from Operations without a second login; the same-origin server performs the collection and keeps provider credentials private. Cron remains protected by `CRON_SECRET`. Source URLs are restricted to public HTTP(S) targets and reject embedded credentials, localhost, and private-network IPs.
+
+CanadaBuys and the City of Chicago are collected from their official anonymous CSV/HTML endpoints because Scraper Studio rejected or failed generation for those government domains. They still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline.
 
 Current proof status is documented in [docs/bright-data-proof.md](docs/bright-data-proof.md). No Collector ID is fabricated. The self-healing evidence protocol is in [docs/healing-proof.md](docs/healing-proof.md).
 
@@ -112,7 +113,6 @@ NVIDIA_API_KEY=
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_MODEL=
 CRON_SECRET=
-ADMIN_SECRET=
 BRIGHT_DATA_CREDENTIALS_PATH=
 DEMO_MODE=recorded-live
 ```
@@ -137,7 +137,7 @@ pnpm tsx scripts/validate-source.ts run-metrics.json
 
 Build the evidence replay with `pnpm replay:build`. It preserves artifact-level provenance: completed dataset runs, approved extraction previews, and rejected runs remain distinct.
 
-In **Operations**, enter the deployment's `ADMIN_SECRET` once to unlock live collector controls. **Refresh active feeds** runs the ASL and CCA collectors sequentially and refreshes the feed only after each run passes validation. AAI is an auxiliary publication index and is deliberately archived without being published as a contract opportunity.
+In **Operations**, click **Run all live sources**. SecureContract runs the active Bright Data and public-page collectors sequentially, then refreshes the feed only after each run passes validation. AAI is an auxiliary publication index and is deliberately archived without being published as a contract opportunity.
 
 ## Project map
 
@@ -149,7 +149,7 @@ src/lib/sources/            source adapter interface and registry
 src/lib/validation.ts       deterministic run acceptance
 src/lib/normalization.ts    status/procedure/hash/diff behavior
 src/lib/ai/                 grounded context and NVIDIA provider
-server/index.ts             protected server API
+server/index.ts             server API and one-click collection orchestration
 db/schema.ts                PostgreSQL + Drizzle tables
 tests/                      unit, integration, and browser E2E
 docs/                       architecture and proof ledgers

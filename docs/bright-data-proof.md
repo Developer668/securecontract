@@ -10,6 +10,8 @@ The Bright Data CLI was authenticated and verified on 2026-08-17 with `@brightda
 | Australian Sustainability Leaders tenders | https://asl.org.au/tenders | `c_msxxrkb9zckaljn0a` | Completed run, response `d2t1787014014069rrj38shevv9o` | 4 | title, type, status, open/closing dates, detail/source URL | Raw closing text includes a later phase label; the adapter preserves it and parses the leading timestamp |
 | California Community Choice Association procurement | https://ccauthority.org/bid-opportunites/ | `c_msxy8dx318cy3aekq5` | Completed post-heal run, response `d2t1787014744903r0r6ggh7kkeg` | 1 | project ID/title, site, location, status, optional dates, URLs | Bright still returned a nested wrapper after same-ID heal; SecureContract archives it unchanged, then flattens it at the adapter boundary |
 
+CanadaBuys and City of Chicago were also attempted in Scraper Studio. CanadaBuys generation failed twice and Chicago returned `Domain not allowed`; the repository preserves those creation envelopes. SecureContract therefore collects their official anonymous feeds with registered public-source adapters rather than inventing Collector IDs. Both sources use the same validation and publication boundary and produced 25/25 valid rows in live application runs.
+
 The first baseline returned 234 document URLs with empty nested `publications` arrays. This was archived as a failed extraction, repaired with the real Self-Healing flow, explicitly reviewed/approved, and rerun successfully under the same Collector ID. See [healing-proof.md](healing-proof.md).
 
 ## Artifacts
@@ -43,4 +45,4 @@ The authenticated Safari dashboard was cross-checked again on 2026-08-17. The Sc
 
 ## SecureContract API verification
 
-The authenticated application route triggered the active ASL collector again on 2026-08-17 and received snapshot `j_msy4j0l9bqiyc52df`. SecureContract polled for roughly 90 seconds, archived the raw rows, and accepted 4/4 rows with score 100: 100% required-field completeness, 100% date parsing, zero duplicates, and no access wall. The newest run and opportunity `lastSeenAt` values were visible immediately in the operator console and feed.
+The application's one-click Operations route triggered the active ASL collector again on 2026-08-17 and received snapshot `j_msy4j0l9bqiyc52df`. SecureContract polled for roughly 90 seconds, archived the raw rows, and accepted 4/4 rows with score 100: 100% required-field completeness, 100% date parsing, zero duplicates, and no access wall. The newest run and opportunity `lastSeenAt` values were visible immediately in Operations and the feed.

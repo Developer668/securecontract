@@ -37,7 +37,7 @@ export function parseLocalDate(value: string, timezone: string): string | null {
     "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss", 'yyyy-MM-dd HH:mm:ss',
     'dd-MMM-yyyy HH:mm', 'dd-MMM-yyyy hh:mm a', 'dd MMM yyyy HH:mm', 'dd MMM yyyy h:mm a', 'dd MMM yyyy h a', 'dd-MM-yyyy HH:mm', 'dd/MM/yyyy HH:mm',
     'MM/dd/yyyy h:mm a', 'd MMMM yyyy h:mm a', 'd MMMM yyyy H:mm',
-    'dd-MMM-yyyy', 'dd MMM yyyy', 'dd-MM-yyyy', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd',
+    'dd-MMM-yyyy', 'dd MMM yyyy', 'dd-MM-yyyy', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'yyyy/MM/dd',
   ];
   for (const candidate of candidates) {
     for (const format of formats) {
