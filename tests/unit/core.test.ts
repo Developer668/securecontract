@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { classifySeverity, diffOpportunity, normalizeProcedure, normalizeStatus, parseLocalDate, stableHash } from '../../src/lib/normalization';
+import { classifySeverity, closeExpiredOpportunity, diffOpportunity, normalizeProcedure, normalizeStatus, parseLocalDate, stableHash, statusAtDeadline } from '../../src/lib/normalization';
 import { validateRun } from '../../src/lib/validation';
 import { buildCopilotContext } from '../../src/lib/ai/context';
 import { adapterFor } from '../../src/lib/sources';
@@ -14,6 +14,7 @@ describe('normalization',()=>{
   it('makes deadlines critical',()=>expect(classifySeverity('submissionDueAt','a','b')).toBe('critical'));
   it('creates a material diff',()=>expect(diffOpportunity(opportunities[0],{...opportunities[0],submissionDueAt:'2026-09-01T00:00:00Z'}).some(change=>change.severity==='critical')).toBe(true));
   it('parses portal dates in their configured timezone',()=>{expect(parseLocalDate('26-Aug-2026 17:00','Asia/Kolkata')).toBe('2026-08-26T11:30:00.000Z');expect(parseLocalDate('18 Aug 2026 | 5pm AEST','Australia/Sydney')).toBe('2026-08-18T07:00:00.000Z');expect(parseLocalDate('7/17/2026','America/Los_Angeles')).toBe('2026-07-17T07:00:00.000Z');expect(parseLocalDate('not a date','Asia/Kolkata')).toBeNull();});
+  it('closes expired opportunities from their submission deadline',()=>{expect(statusAtDeadline('open','2026-08-16T00:00:00.000Z','2026-08-17T00:00:00.000Z')).toBe('closed');expect(statusAtDeadline('open','2026-08-18T00:00:00.000Z','2026-08-17T00:00:00.000Z')).toBe('open');const closed=closeExpiredOpportunity({...opportunities[0],status:'open',submissionDueAt:'2026-08-16T00:00:00.000Z'},'2026-08-17T00:00:00.000Z');expect(closed.status).toBe('closed');expect(closed.changes).toEqual(expect.arrayContaining([expect.objectContaining({field:'status',newValue:'closed'})]));});
 });
 describe('run protection',()=>{
   it('rejects zero rows and preserves last-known-good',()=>expect(validateRun({rowCount:0,baselineRowCount:100,requiredFieldCompleteness:0,dateParseRate:0,duplicateRate:0,schemaStability:0,freshness:1,accessWallDetected:false})).toMatchObject({accepted:false,health:'degraded'}));
@@ -29,6 +30,11 @@ describe('public source parsers',()=>{
     const source=liveSources.find(candidate=>candidate.slug==='canada-canadabuys')!;
     const csv='title-titre-eng,solicitationNumber-numeroSollicitation,referenceNumber-numeroReference,contractingEntityName-nomEntitContractante-eng,tenderStatus-appelOffresStatut-eng,publicationDate-datePublication,tenderClosingDate-appelOffresDateCloture,noticeURL-URLavis-eng\n"Road services","CA-1","cb-1","Public Works","Open","2026/08/17","2026/09/01",""';
     expect(publicScraperParsers.canadaBuysRows(csv,source)[0]).toMatchObject({title:'Road services',solicitation_id:'CA-1',organization:'Public Works',detail_url:'https://canadabuys.canada.ca/en/tender-opportunities/tender-notice/cb-1'});
+  });
+  it('does not return expired public-source rows',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='canada-canadabuys')!;
+    const csv='title-titre-eng,solicitationNumber-numeroSollicitation,referenceNumber-numeroReference,contractingEntityName-nomEntitContractante-eng,tenderStatus-appelOffresStatut-eng,publicationDate-datePublication,tenderClosingDate-appelOffresDateCloture,noticeURL-URLavis-eng\n"Expired road services","CA-OLD","cb-old","Public Works","Open","2020/01/01","2020/02/01",""';
+    expect(publicScraperParsers.canadaBuysRows(csv,source)).toHaveLength(0);
   });
   it('maps Chicago solicitation table rows',()=>{
     const source=liveSources.find(candidate=>candidate.slug==='us-chicago-solicitations')!;

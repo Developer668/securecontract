@@ -12,6 +12,7 @@ import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
 import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
 import { scrapePublicSource } from "../src/lib/public-scrapers.js";
+import { closeExpiredOpportunity } from "../src/lib/normalization.js";
 import { PostgresRepository } from "../db/repository.js";
 import type { SourceConfig } from "../src/types.js";
 
@@ -150,9 +151,10 @@ const cron = (
 const listSources = async (): Promise<SourceConfig[]> =>
   postgres ? postgres.listSources() : runtimeSources;
 const listOpportunities = async () =>
-  postgres
-    ? postgres.listOpportunities()
-    : [...memoryStore.opportunities.values()];
+  (postgres
+    ? await postgres.listOpportunities()
+    : [...memoryStore.opportunities.values()]
+  ).map((opportunity) => closeExpiredOpportunity(opportunity));
 app.get("/api/health", (_request, response) =>
   response.json({
     ok: true,

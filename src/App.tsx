@@ -715,9 +715,11 @@ function OpportunitiesView({
 }) {
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("open");
   const [sourceId, setSourceId] = useState("all");
-  const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(
+    items.find((item) => item.status === "open")?.id ?? items[0]?.id ?? "",
+  );
   const [tab, setTab] = useState<DetailTab>(
     openApplication ? "workspace" : "summary",
   );
@@ -734,7 +736,6 @@ function OpportunitiesView({
     () => [...new Set(items.map((item) => item.status))],
     [items],
   );
-  const selected = items.find((item) => item.id === selectedId) ?? items[0];
   const degraded = sources.find((source) => source.status === "degraded");
   const filtered = useMemo(
     () =>
@@ -749,6 +750,8 @@ function OpportunitiesView({
       ),
     [items, search, country, status, sourceId],
   );
+  const selected =
+    filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
   if (!selected)
     return (
       <main>

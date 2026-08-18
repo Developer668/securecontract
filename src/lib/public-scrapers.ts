@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { load } from "cheerio";
 import { parse } from "csv-parse/sync";
 import type { SourceConfig } from "../types.js";
+import { normalizeStatus, parseLocalDate, statusAtDeadline } from "./normalization.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -31,6 +32,16 @@ async function fetchHtml(url: string) {
 
 const absoluteUrl = (value: string | undefined, base: string) =>
   value ? new URL(value, base).toString() : base;
+const isOpenAtCollection = (
+  statusRaw: string | undefined,
+  closingRaw: string | undefined,
+  source: SourceConfig,
+) =>
+  statusAtDeadline(
+    normalizeStatus(statusRaw),
+    closingRaw ? parseLocalDate(closingRaw, source.timezone) : null,
+  ) === "open";
+
 function canadaBuysRows(html: string, source: SourceConfig) {
   type CanadaRow = Record<string, string>;
   const rows = parse(html, {
@@ -45,7 +56,6 @@ function canadaBuysRows(html: string, source: SourceConfig) {
         left["publicationDate-datePublication"] ?? "",
       ),
     )
-    .slice(0, 25)
     .map((row) => ({
       title: row["title-titre-eng"],
       solicitation_id:
@@ -70,7 +80,13 @@ function canadaBuysRows(html: string, source: SourceConfig) {
           : source.sourceUrl),
       source_url: source.sourceUrl,
     }))
-    .filter((row) => row.title && row.detail_url);
+    .filter(
+      (row) =>
+        row.title &&
+        row.detail_url &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    )
+    .slice(0, 25);
 }
 
 function chicagoRows(html: string, source: SourceConfig) {
@@ -95,7 +111,13 @@ function chicagoRows(html: string, source: SourceConfig) {
       };
     })
     .get()
-    .filter((row) => row.title && row.detail_url);
+    .filter(
+      (row) =>
+        row.title &&
+        row.detail_url &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    )
+    .slice(0, 25);
 }
 
 export async function scrapePublicSource(source: SourceConfig) {

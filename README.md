@@ -57,6 +57,8 @@ Raw records are append-only in the database model. Volatile observation metadata
 
 Run validation covers zero rows, volume collapse, required-field completeness, date parse rate, duplicate rate, schema drift, access-wall detection, and freshness. Health is deterministic: 30% completeness, 25% date parsing, 20% volume stability, 15% schema stability, and 10% freshness.
 
+Discover defaults to open opportunities. Public-source scrapers discard rows whose source status is not open or whose parsed submission deadline has passed. Previously collected records are retained for evidence, but their canonical status automatically becomes `closed` once the deadline passes and the transition appears in the change history.
+
 When a run is rejected, SecureContract does not replace accepted opportunities or infer that missing rows are closed. The UI explicitly displays `LAST KNOWN GOOD` and the reason the latest source run is degraded.
 
 ## Bright Data Scraper Studio

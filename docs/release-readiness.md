@@ -39,7 +39,7 @@ The server-only provider, grounded context pack, structured output validation, c
 |---|---|
 | Lint | PASS |
 | Typecheck | PASS |
-| Unit/contract/integration tests | PASS — 21 tests |
+| Unit/contract/integration tests | PASS — 23 tests |
 | Desktop/mobile E2E | PASS — 4 tests |
 | Safari visual verification | PASS |
 | Live NVIDIA NIM verification | PASS |

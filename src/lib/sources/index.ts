@@ -4,6 +4,7 @@ import {
   normalizeProcedure,
   normalizeStatus,
   parseLocalDate,
+  statusAtDeadline,
   stableHash,
 } from "../normalization.js";
 
@@ -39,6 +40,7 @@ function normalizeSimple(
 ): NormalizedOpportunityResult {
   const raw = simpleRawSchema.parse(input);
   const internalKey = `${context.source.id}:${raw.external_id ?? raw.detail_url}`;
+  const submissionDueAt = raw.closing_date_iso ?? null;
   const base = {
     id: internalKey,
     sourceId: context.source.id,
@@ -54,7 +56,7 @@ function normalizeSimple(
     descriptionOriginal: null,
     descriptionEnglish: null,
     sourceLanguage: context.source.sourceLanguage,
-    status: normalizeStatus(raw.status_raw),
+    status: statusAtDeadline(normalizeStatus(raw.status_raw), submissionDueAt, context.collectedAt),
     procedureTypeOriginal: raw.procedure_type_raw ?? null,
     procedureType: normalizeProcedure(raw.procedure_type_raw),
     industryCodes: [],
@@ -62,7 +64,7 @@ function normalizeSimple(
     estimatedValueMinor: null,
     publishedAt: null,
     questionsDueAt: null,
-    submissionDueAt: raw.closing_date_iso ?? null,
+    submissionDueAt,
     bidOpeningAt: null,
     prebidMeetingAt: null,
     localTimezone: context.source.timezone,
@@ -231,6 +233,9 @@ function normalizeListing(
     raw.closing_date_raw ??
     raw.bid_closing_date_raw ??
     raw.last_sale_date_raw;
+  const submissionDueAt = submissionRaw
+    ? parseLocalDate(submissionRaw, context.source.timezone)
+    : null;
   const publishedRaw =
     raw.release_date_raw ?? raw.open_date_raw ?? raw.published_date_raw ?? raw.document_upload_date_raw;
   const bidOpeningRaw = raw.bid_opening_date_raw;
@@ -250,7 +255,7 @@ function normalizeListing(
     descriptionOriginal: raw.brief_description ?? raw.description ?? null,
     descriptionEnglish: null,
     sourceLanguage: context.source.sourceLanguage,
-    status: normalizeStatus(statusRaw),
+    status: statusAtDeadline(normalizeStatus(statusRaw), submissionDueAt, context.collectedAt),
     procedureTypeOriginal: procedureRaw ?? null,
     procedureType: normalizeProcedure(procedureRaw),
     industryCodes: [],
@@ -260,9 +265,7 @@ function normalizeListing(
       ? parseLocalDate(publishedRaw, context.source.timezone)
       : null,
     questionsDueAt: null,
-    submissionDueAt: submissionRaw
-      ? parseLocalDate(submissionRaw, context.source.timezone)
-      : null,
+    submissionDueAt,
     bidOpeningAt: bidOpeningRaw
       ? parseLocalDate(bidOpeningRaw, context.source.timezone)
       : null,

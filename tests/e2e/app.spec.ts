@@ -6,7 +6,11 @@ test("core opportunity workflow", async ({ page }) => {
   const opportunityResponse = await page.request.get("/api/opportunities");
   expect(opportunityResponse.ok()).toBe(true);
   expect((await opportunityResponse.json()).provenance).toBe("recorded_live");
+  await expect(page.getByLabel("Status filter")).toHaveValue("open");
+  await page.getByLabel("Status filter").selectOption("all");
+  await page.getByLabel("Close detail").click();
   await expect(page.getByText("NSW Roadmap - Tender Round 9").first()).toBeVisible();
+  await page.getByText("NSW Roadmap - Tender Round 9").first().click();
   await page.getByRole("button", { name: "Raw" }).click();
   await expect(page.getByText("Immutable source row")).toBeVisible();
   await expect(page.getByText("Completed Bright Data custom collector dataset run")).toBeVisible();
@@ -22,6 +26,8 @@ test("core opportunity workflow", async ({ page }) => {
 
 test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByLabel("Status filter")).toHaveValue("open");
+  await page.getByLabel("Status filter").selectOption("all");
   await page.getByLabel("Country filter").selectOption("AU");
   await expect(page.getByText("Capacity Investment Scheme NEM Dispatchable").first()).toBeVisible();
   await page.getByRole("button", { name: "Operations" }).click();

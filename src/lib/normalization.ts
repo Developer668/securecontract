@@ -13,6 +13,50 @@ export function normalizeStatus(value: string | null | undefined): OpportunitySt
   return 'unknown';
 }
 
+export function statusAtDeadline(
+  status: OpportunityStatus,
+  submissionDueAt: string | null,
+  asOf: string = new Date().toISOString(),
+): OpportunityStatus {
+  if (status === 'cancelled' || status === 'awarded' || status === 'closed') return status;
+  if (!submissionDueAt) return status;
+  const deadline = Date.parse(submissionDueAt);
+  const observed = Date.parse(asOf);
+  return Number.isFinite(deadline) && Number.isFinite(observed) && deadline <= observed
+    ? 'closed'
+    : status;
+}
+
+export function closeExpiredOpportunity(
+  opportunity: Opportunity,
+  asOf: string = new Date().toISOString(),
+): Opportunity {
+  const status = statusAtDeadline(opportunity.status, opportunity.submissionDueAt, asOf);
+  if (status === opportunity.status) return opportunity;
+  const alreadyRecorded = opportunity.changes.some(
+    (change) => change.field === 'status' && change.newValue === 'closed',
+  );
+  const updated: Opportunity = {
+    ...opportunity,
+    status,
+    changes: alreadyRecorded
+      ? opportunity.changes
+      : [
+          ...opportunity.changes,
+          {
+            id: `deadline-closed-${opportunity.id}`,
+            field: 'status',
+            oldValue: opportunity.status,
+            newValue: 'closed',
+            severity: 'low',
+            observedAt: opportunity.submissionDueAt ?? asOf,
+          },
+        ],
+  };
+  updated.contentHash = stableHash(updated as unknown as Record<string, unknown>);
+  return updated;
+}
+
 export function normalizeProcedure(value: string | null | undefined): ProcedureType {
   const text = value?.trim().toLowerCase() ?? '';
   if (/request for proposal|\brfp\b/.test(text)) return 'request_for_proposal';
