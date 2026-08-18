@@ -44,6 +44,7 @@ export class FundingNimProvider {
     question: string;
     profile: LabProfile;
     opportunities: FundingOpportunity[];
+    conversation?: Array<{role:'user'|'assistant';content:string}>;
     catalog?: Array<Pick<FundingOpportunity,'id'|'title'|'funder'|'summary'|'deadlineText'|'amountText'|'status'|'detailUrl'>>;
   }): Promise<FundingChatResponse> {
     const context = {
@@ -69,6 +70,7 @@ export class FundingNimProvider {
         tasks:item.tasks,
         raw:item.raw ?? {},
       })),
+      recentConversation:(input.conversation??[]).slice(-6),
       portfolioCatalog:input.catalog ?? [],
     };
     const request = () => this.fetcher(`${this.config.baseUrl}/chat/completions`, {

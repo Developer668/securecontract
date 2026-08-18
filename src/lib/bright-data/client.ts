@@ -35,13 +35,20 @@ export class BrightDataClient {
       `site:${source.hostname} ("research award" OR fellowship OR "young investigator" OR "seed grant") (deadline OR applications)`,
       `site:${source.hostname} (pilot OR equipment OR compute OR accelerator OR challenge) (grant OR funding OR award) research`,
     ];
-    const pages=await Promise.all(queries.map(async(query)=>{
-      const searchUrl=`https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&num=20`;
+    // Keep discovery bounded, but search beyond Google's first result page. Every
+    // response is still returned as Bright Data JSON and the canonical URL map
+    // below removes repeats across query angles and pages.
+    const pageCount=Math.max(1,Math.min(5,Number(process.env.FUNDING_SERP_PAGES ?? 3)));
+    const pages=await Promise.all(queries.flatMap((query)=>Array.from({length:pageCount},(_,page)=> (async()=>{
+      const start=page*20;
+      const searchUrl=`https://www.google.com/search?q=${encodeURIComponent(query)}&brd_json=1&num=20&start=${start}`;
       const response=await this.fetcher(`${API_BASE}/request`,{method:'POST',headers:this.headers(),body:JSON.stringify({zone:'cli_unlocker',url:searchUrl,format:'json',country:'us'})});
       if(!response.ok)throw new BrightDataError(`Bright Data search failed (${response.status})`,response.status);
       const envelope=await response.json() as {body?:string|{organic?:Array<{title?:string;link?:string;description?:string}>};organic?:Array<{title?:string;link?:string;description?:string}>};
-      return typeof envelope.body==='string'?JSON.parse(envelope.body) as {organic?:Array<{title?:string;link?:string;description?:string}>}:envelope.body??envelope;
-    }));
+      if(typeof envelope.body!=='string') return envelope.body??envelope;
+      try { return JSON.parse(envelope.body) as {organic?:Array<{title?:string;link?:string;description?:string}>}; }
+      catch { return {organic:[]}; }
+    })())));
     const sourceHost = source.hostname.replace(/^www\./,'');
     const unique=new Map<string,{title:string;detail_url:string;summary:string;external_id:string}>();
     pages.flatMap((page)=>page.organic??[]).forEach((result,index)=>{

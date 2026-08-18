@@ -244,8 +244,8 @@ const fundingAnswerCache=new Map<string,{expiresAt:number;body:unknown}>();
 const retrieveFunding=(question:string,all:FundingOpportunity[])=>{
   const key=question.trim().toLowerCase();const cached=fundingRetrievalCache.get(key);
   if(cached&&cached.expiresAt>Date.now())return all.filter((item)=>cached.ids.includes(item.id));
-  const questionTokens=new Set(key.split(/[^a-z0-9]+/).filter((token)=>token.length>3));
-  const selected=all.filter((item)=>item.status!=='closed').map((item)=>{const record=[item.title,item.funder,item.summary,...item.researchAreas,...item.commercializationStages,...item.evidence.map((entry)=>`${entry.field} ${entry.passage}`)].join(' ').toLowerCase();let score=item.match.score/20;for(const token of questionTokens)if(record.includes(token))score+=4;return {item,score};}).sort((a,b)=>b.score-a.score).slice(0,8).map(({item})=>item);
+  const questionTokens=new Set(key.split(/[^a-z0-9]+/).filter((token)=>token.length>3&&!new Set(['which','grants','grant','funding','would','could','should','about','their','with','from','that','this','need','best','find','looking']).has(token)));
+  const selected=all.filter((item)=>item.status!=='closed').map((item)=>{const title=`${item.title} ${item.funder}`.toLowerCase();const scope=[item.summary,...item.researchAreas,...item.commercializationStages].join(' ').toLowerCase();const evidence=item.evidence.map((entry)=>`${entry.field} ${entry.passage}`).join(' ').toLowerCase();let score=item.match.score/15;for(const token of questionTokens){if(title.includes(token))score+=12;if(scope.includes(token))score+=6;if(evidence.includes(token))score+=3;}return {item,score};}).filter(({score})=>questionTokens.size===0||score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(({item})=>item);
   fundingRetrievalCache.set(key,{expiresAt:Date.now()+5*60_000,ids:selected.map((item)=>item.id)});return selected;
 };
 const scoreFundingPortfolio=async()=>{
@@ -885,7 +885,7 @@ app.get("/api/funding/healing", (_request, response) => response.json({
 app.post("/api/funding/chat", async (request, response) => {
   const parsed = z.object({
     question: z.string().trim().min(2).max(3000),
-    opportunityIds: z.array(z.string()).max(12).default([]),
+    opportunityIds: z.array(z.string()).max(12).default([]), history:z.array(z.object({role:z.enum(['user','assistant']),content:z.string().max(2000)})).max(6).default([]),
   }).safeParse(request.body);
   if (!parsed.success) return response.status(400).json({ error: "A valid funding question is required" });
   if (!labProfile) return response.status(409).json({ error:"Complete the lab profile before asking for matches" });
@@ -896,6 +896,7 @@ app.post("/api/funding/chat", async (request, response) => {
   const selected = parsed.data.opportunityIds.length
     ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
     : retrieveFunding(parsed.data.question,all);
+  if(!selected.length)return response.json({answer:'I could not find an open funding record that directly matches those terms. Try a research area, disease, applicant type, career stage, budget, or funder name.',evidenceIds:[],opportunityIds:[],followUpQuestions:['What research area or applicant type should I search for?'],draft:true,model:'retrieval',recordsSearched:all.length,recordsRead:0});
   const answerKey=`${labProfile.updatedAt}:${parsed.data.question.trim().toLowerCase()}:${selected.map((item)=>item.id).join(',')}`;
   const cachedAnswer=fundingAnswerCache.get(answerKey);
   if(cachedAnswer&&cachedAnswer.expiresAt>Date.now())return response.json(cachedAnswer.body);
@@ -905,7 +906,7 @@ app.post("/api/funding/chat", async (request, response) => {
       baseUrl: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1",
       model: fundingModel(),
     });
-    const generated=await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected });const strongest=selected.slice(0,3);const fallbackAnswer=`I searched ${all.length} saved funding records and read the ${selected.length} most relevant open grants against the saved lab profile. Start with ${strongest.map((item)=>`${item.title} from ${item.funder}`).join('; ')}. These are the strongest record-level matches, but eligibility, award amount, and the live deadline still need confirmation from each official source linked below.`;const body={...generated,answer:generated.answer.trim().length<180?fallbackAnswer:generated.answer,opportunityIds:generated.answer.trim().length<180?strongest.map((item)=>item.id):generated.opportunityIds,model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length};fundingAnswerCache.set(answerKey,{expiresAt:Date.now()+10*60_000,body});response.json(body);
+    const generated=await provider.chat({ question:parsed.data.question, profile:labProfile, opportunities:selected,conversation:parsed.data.history });const strongest=selected.slice(0,3);const fallbackAnswer=`I searched ${all.length} saved funding records and read the ${selected.length} most relevant open grants against the saved lab profile. Start with ${strongest.map((item)=>`${item.title} from ${item.funder}`).join('; ')}. These are the strongest record-level matches, but eligibility, award amount, and the live deadline still need confirmation from each official source linked below.`;const body={...generated,answer:generated.answer.trim().length<180?fallbackAnswer:generated.answer,opportunityIds:generated.answer.trim().length<180?strongest.map((item)=>item.id):generated.opportunityIds,model:fundingModel(),recordsSearched:all.length,recordsRead:selected.length};fundingAnswerCache.set(answerKey,{expiresAt:Date.now()+10*60_000,body});response.json(body);
   } catch (error) {
     const recommended=selected.slice(0,3);const answer=recommended.length?`Based on the saved lab profile and the strongest retrieved records, start with:\n\n${recommended.map((item,index)=>`${index+1}. ${item.title} — ${item.funder}. ${item.match.explanation} Verify ${item.match.missingInformation.slice(0,2).join(' and ').toLowerCase()||'the official applicant conditions'} before applying.`).join('\n\n')}\n\nThese are discovery recommendations, not verified eligibility decisions. Open the linked official records before committing application effort.`:'No retained grant record is strong enough to recommend yet.';
     const body={answer,evidenceIds:recommended.flatMap((item)=>item.evidence.slice(0,2).map((entry)=>entry.id)),opportunityIds:recommended.map((item)=>item.id),followUpQuestions:['Which grant should I turn into an application checklist?'],draft:true,model:'evidence-safe fallback',recordsSearched:all.length,recordsRead:selected.length,warning:error instanceof Error?error.message:'Funding model temporarily unavailable'};fundingAnswerCache.set(answerKey,{expiresAt:Date.now()+10*60_000,body});response.json(body);
