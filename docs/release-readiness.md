@@ -7,11 +7,12 @@ Verified 2026-08-18. `PASS` means the behavior was executed, not inferred.
 | Source | Country / jurisdiction | Collector | Latest valid rows | Health |
 |---|---|---|---:|---|
 | Australian Sustainability Leaders tenders | Australia / national program | `c_msxxrkb9zckaljn0a` | 4 | Healthy / active |
+| VendorPanel Australian public tenders | Australia / councils and agencies | `c_msyxk9sd1olj4rz9i9` | 50 | Healthy / active |
 | Airports Authority of India publication index | India / AAI | `c_msxulljug99b25hby` | 234 publication rows | Warning: auxiliary index, not canonical opportunities |
 | California Community Choice Association | United States / California | `c_msxy8dx318cy3aekq5` | 1 | Healthy / active |
 | CanadaBuys open tender notices | Canada / national | Official daily CSV | 882 | Healthy / active |
 | Québec SEAO open contracting notices | Canada / Québec | Official weekly OCDS JSON | 700 | Healthy / active |
-| Tenders Electronic Daily | European Union / regional | Official TED Search API | 4,500 | Healthy / active |
+| Tenders Electronic Daily | European Union / regional | Official TED Search API | 39,593 | Healthy / active |
 | City of Chicago active solicitations | United States / Chicago | Official public table | 25 last known good | Warning: official endpoint unavailable |
 | Texas DOT official bid items | United States / Texas | Texas Open Data API | 342 | Healthy / active |
 | Los Angeles RAMP open bids | United States / Los Angeles | LA Open Data API | 391 | Healthy / active |
@@ -34,7 +35,7 @@ Verified 2026-08-18. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 7,007 accepted opportunities, with a hard ceiling of 99,000; the auxiliary AAI index is not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 42,150 accepted opportunities, with a hard ceiling of 99,000; rejected MERX batches and the auxiliary AAI index are not silently promoted.
 
 ## NVIDIA NIM
 

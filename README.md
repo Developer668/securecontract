@@ -4,7 +4,7 @@
 
 SecureContract is a self-healing, evidence-grounded public-procurement intelligence product. It is designed to turn structurally different public portals into one canonical opportunity stream while preserving what the government site and scraper actually said.
 
-The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay currently contains 7,007 opportunities, including 7,002 open listings, 1,565 Canadian listings, 938 US listings, and 4,500 notices from the European Union's official TED API. A hard 99,000-record ceiling prevents unbounded browser and replay growth. Live collection through the product and live NVIDIA NIM inference are both verified.
+The repository contains the runnable product, PostgreSQL/Drizzle schema, collection and NIM provider integrations, deterministic validation/versioning, tests, custom Bright Data collector artifacts, and a truthful replay mode. The canonical replay currently contains 42,150 opportunities, including 42,140 open listings as of 2026-08-18, 1,565 Canadian listings, 938 US listings, 54 Australian listings, and 39,593 notices from the European Union's official TED API. A hard 99,000-record ceiling prevents unbounded browser and replay growth. Live collection through the product and live NVIDIA NIM inference are both verified.
 
 ## Why this exists
 
@@ -72,7 +72,7 @@ When a run is rejected, SecureContract does not replace accepted opportunities o
 
 The Bright Data token is never sent to the browser. A user can run every configured source from Operations without a second login; the same-origin server performs the collection and keeps provider credentials private. Cron remains protected by `CRON_SECRET`. Source URLs are restricted to public HTTP(S) targets and reject embedded credentials, localhost, and private-network IPs.
 
-CanadaBuys, Québec SEAO, EU TED, Texas DOT, Los Angeles RAMP, New York City, Montgomery County, San Francisco, and Chicago use official anonymous CSV, JSON, OCDS, or HTML endpoints because Scraper Studio rejected or failed generation for several government domains. TED is paginated at 250 notices per request and intentionally capped at 4,500 open notices per run. These sources still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline. Chicago's live page is currently unavailable, so its source is warning-only and its last accepted rows are preserved rather than represented as freshly collected.
+CanadaBuys, Québec SEAO, EU TED, Texas DOT, Los Angeles RAMP, New York City, Montgomery County, San Francisco, and Chicago use official anonymous CSV, JSON, OCDS, or HTML endpoints because Scraper Studio rejected or failed generation for several government domains. TED uses the official 250-notice iteration cursor to collect the complete current open result set while the application enforces its 99,000-record ceiling. These sources still pass through the same archive, validation, normalization, evidence, and last-known-good pipeline. Chicago's live page is currently unavailable, so its source is warning-only and its last accepted rows are preserved rather than represented as freshly collected.
 
 Current proof status is documented in [docs/bright-data-proof.md](docs/bright-data-proof.md). No Collector ID is fabricated. The self-healing evidence protocol is in [docs/healing-proof.md](docs/healing-proof.md).
 

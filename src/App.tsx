@@ -729,12 +729,15 @@ function OpportunitiesView({
   const [findingMore, setFindingMore] = useState(false);
   const [findState, setFindState] = useState("");
   const [selectedId, setSelectedId] = useState(
-    items.find((item) => item.status === "open")?.id ?? items[0]?.id ?? "",
+    openApplication
+      ? items.find((item) => item.status === "open")?.id ?? items[0]?.id ?? ""
+      : "",
   );
+  const [selectedDetail, setSelectedDetail] = useState<Opportunity | null>(null);
   const [tab, setTab] = useState<DetailTab>(
     openApplication ? "workspace" : "summary",
   );
-  const [detailOpen, setDetailOpen] = useState(true);
+  const [detailOpen, setDetailOpen] = useState(openApplication);
   const countries = useMemo(
     () => [
       ...new Map(
@@ -775,7 +778,9 @@ function OpportunitiesView({
     [items, search, country, status, sourceId, procedure, verification, changeFilter, dueFrom, dueTo, buyer],
   );
   const selected =
-    filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
+    selectedDetail?.id === selectedId
+      ? selectedDetail
+      : filtered.find((item) => item.id === selectedId) ?? null;
   const findMore = async () => {
     setFindingMore(true);
     const publicSources = sources.filter(
@@ -951,7 +956,13 @@ function OpportunitiesView({
           selected={selected}
           onSelect={(item) => {
             setSelectedId(item.id);
+            setSelectedDetail(null);
             setDetailOpen(true);
+            void fetch(`/api/opportunities/${encodeURIComponent(item.id)}`)
+              .then((response) => response.json())
+              .then((body: { data?: Opportunity }) => {
+                if (body.data) setSelectedDetail(body.data);
+              });
           }}
         />
         {filtered.length > visibleLimit && (

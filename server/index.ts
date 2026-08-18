@@ -1,7 +1,9 @@
 import express from "express";
+import compression from "compression";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import {
   opportunities as demonstrationOpportunities,
   sources as demonstrationSources,
@@ -17,6 +19,7 @@ import { PostgresRepository } from "../db/repository.js";
 import type { SourceConfig } from "../src/types.js";
 
 const app = express();
+app.use(compression());
 app.use(express.json({ limit: "1mb" }));
 const port = Number(process.env.API_PORT ?? 8787);
 let brightDataToken = process.env.BRIGHT_DATA_API_TOKEN;
@@ -35,11 +38,11 @@ const memoryStore = new MemoryIngestionStore();
 const runtimeSources: SourceConfig[] = [
   ...(recordedLiveMode ? liveSources : demonstrationSources),
 ];
-const replayPath = "fixtures/recorded-live/replay-opportunities.json";
+const replayPath = "fixtures/recorded-live/replay-opportunities.json.gz";
 const replayOpportunities =
   recordedLiveMode && existsSync(replayPath)
     ? (JSON.parse(
-        readFileSync(replayPath, "utf8"),
+        gunzipSync(readFileSync(replayPath)).toString("utf8"),
       ) as typeof demonstrationOpportunities)
     : [];
 (recordedLiveMode ? replayOpportunities : demonstrationOpportunities).forEach(
@@ -99,7 +102,13 @@ if (recordedLiveMode) {
       id: "recorded-ted-public-run",
       sourceId: "21000000-0000-4000-8000-000000000009",
       collectionId: "public-ted-recorded-live",
-      rowCount: 4500,
+      rowCount: 39593,
+    },
+    {
+      id: "recorded-vendorpanel-bright-data-run",
+      sourceId: "21000000-0000-4000-8000-000000000014",
+      collectionId: "d2t1787074248760rm202d7du50g",
+      rowCount: 50,
     },
     {
       id: "recorded-quebec-seao-public-run",
@@ -216,7 +225,13 @@ app.get("/api/health", (_request, response) =>
 );
 app.get("/api/opportunities", async (_request, response) =>
   response.json({
-    data: await listOpportunities(),
+    data: (await listOpportunities()).map((opportunity) => ({
+      ...opportunity,
+      raw: {},
+      evidence: [],
+      descriptionOriginal: null,
+      descriptionEnglish: null,
+    })),
     provenance: postgres
       ? "postgres"
       : recordedLiveMode
@@ -229,6 +244,13 @@ app.get("/api/opportunities", async (_request, response) =>
         : "These rows demonstrate the product workflow and are not represented as live Bright Data output.",
   }),
 );
+app.get("/api/opportunities/:id", async (request, response) => {
+  const opportunity = (await listOpportunities()).find(
+    (candidate) => candidate.id === request.params.id,
+  );
+  if (!opportunity) return response.status(404).json({ error: "Opportunity not found" });
+  return response.json({ data: opportunity });
+});
 app.get("/api/sources", async (_request, response) => {
   const sourceList = await listSources();
   const runs = postgres ? await postgres.listRuns() : memoryStore.runs;

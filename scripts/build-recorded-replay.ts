@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { liveSources } from "../src/data/live-sources.js";
 
@@ -11,6 +12,29 @@ function readJson<T>(path: string): T {
 
 const aslRows = readJson<unknown[]>(
   "fixtures/recorded-live/australia-asl/run-v3.json",
+);
+const vendorPanelArchivedRows = readJson<Array<{
+  tenders?: Array<{ title?: string; buyer?: string; status?: string; closing_date?: string }>;
+  product_page_url?: string;
+}>>("fixtures/recorded-live/australia-vendorpanel/run-live.json");
+const vendorPanelDate = (value: string | undefined) => {
+  const match = value?.match(/^(\d{2})\/(\w{3})\/(\d{4}) (\d{2}):(\d{2}) (AM|PM) \(UTC([+-]\d{2}:\d{2})\)/i);
+  if (!match) return value;
+  const months: Record<string, string> = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+  const hour = (Number(match[4]) % 12) + (match[6].toUpperCase() === "PM" ? 12 : 0);
+  return `${match[3]}-${months[match[2]]}-${match[1]}T${String(hour).padStart(2, "0")}:${match[5]}:00${match[7]}`;
+};
+const vendorPanelRows = vendorPanelArchivedRows.flatMap((wrapper) =>
+  (wrapper.tenders ?? []).map((tender) => ({
+    title: tender.title,
+    solicitation_id: wrapper.product_page_url?.match(/[?&]id=([^&]+)/)?.[1] ?? tender.title,
+    organization: tender.buyer,
+    status_raw: tender.status,
+    procedure_type_raw: "Public tender",
+    closing_date_raw: vendorPanelDate(tender.closing_date),
+    detail_url: wrapper.product_page_url,
+    source_url: "https://www.vendorpanel.com.au/PublicTenders.aspx",
+  })),
 );
 const ccaRows = readJson<unknown[]>(
   "fixtures/recorded-live/california-cca/post-heal-v3.json",
@@ -33,6 +57,7 @@ const montgomeryRows = readJson<unknown[]>("fixtures/recorded-live/us-montgomery
 const sanFranciscoRows = readJson<unknown[]>("fixtures/recorded-live/us-san-francisco/run-live.json");
 
 const aslSource = liveSources.find((source) => source.slug === "australia-asl-tenders");
+const vendorPanelSource = liveSources.find((source) => source.slug === "australia-vendorpanel-tenders");
 const ccaSource = liveSources.find((source) => source.slug === "california-cca-procurement");
 const aaiSource = liveSources.find((source) => source.slug === "india-aai-publications");
 const canadaSource = liveSources.find((source) => source.slug === "canada-canadabuys");
@@ -44,13 +69,20 @@ const chicagoSource = liveSources.find((source) => source.slug === "us-chicago-s
 const nycSource = liveSources.find((source) => source.slug === "us-nyc-current-bids");
 const montgomerySource = liveSources.find((source) => source.slug === "us-montgomery-solicitations");
 const sanFranciscoSource = liveSources.find((source) => source.slug === "us-san-francisco-bids");
-if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !quebecSource || !texasSource || !losAngelesSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
+if (!aslSource || !vendorPanelSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !quebecSource || !texasSource || !losAngelesSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
   throw new Error("Recorded source configuration is incomplete");
 
 const aslResult = await ingestRows({
   source: aslSource,
   collectionId: "d2t1787014014069rrj38shevv9o",
   rows: aslRows,
+  store,
+  observedAt,
+});
+const vendorPanelResult = await ingestRows({
+  source: vendorPanelSource,
+  collectionId: "d2t1787074248760rm202d7du50g",
+  rows: vendorPanelRows,
   store,
   observedAt,
 });
@@ -151,8 +183,8 @@ const opportunities = [...store.opportunities.values()].slice(0, MAX_CANONICAL_O
 }));
 
 writeFileSync(
-  "fixtures/recorded-live/replay-opportunities.json",
-  `${JSON.stringify(opportunities, null, 2)}\n`,
+  "fixtures/recorded-live/replay-opportunities.json.gz",
+  gzipSync(JSON.stringify(opportunities), { level: 9 }),
 );
 writeFileSync(
   "fixtures/recorded-live/replay-manifest.json",
@@ -169,6 +201,15 @@ writeFileSync(
           artifactKind: "completed custom collector dataset run",
           runStatus: aslResult.run.status,
           published: aslResult.published.length,
+        },
+        {
+          slug: vendorPanelSource.slug,
+          collectorId: vendorPanelSource.collectorId,
+          artifact: "australia-vendorpanel/run-live.json",
+          artifactKind: "completed Bright Data custom collector dataset run",
+          runStatus: vendorPanelResult.run.status,
+          published: vendorPanelResult.published.length,
+          archivedShape: "one tender nested per immutable page wrapper; flattened after archival",
         },
         {
           slug: ccaSource.slug,
@@ -273,7 +314,8 @@ writeFileSync(
       provenance: "completed_live_scraper_runs",
       notice:
         "Canonical example derived from completed Bright Data and public-page scraper runs. Any preview-only source remains identified separately in the manifest.",
-      data: opportunities,
+      canonicalOpportunityCount: opportunities.length,
+      data: opportunities.slice(0, 100),
     },
     null,
     2,
@@ -284,6 +326,7 @@ console.log(
   JSON.stringify({
     opportunities: opportunities.length,
     aslStatus: aslResult.run.status,
+    vendorPanelStatus: vendorPanelResult.run.status,
     ccaStatus: ccaResult.run.status,
     aaiContractValidRows: aaiValidCount,
     canadaStatus: canadaResult.run.status,

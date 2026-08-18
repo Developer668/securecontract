@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-18T16:24:13.849Z",
+  "generatedAt": "2026-08-18T17:50:44.386Z",
   "replayProvenance": "completed_live_scraper_runs",
-  "canonicalOpportunityCount": 7007,
+  "canonicalOpportunityCount": 42150,
   "sourceResults": [
     {
       "slug": "australia-asl-tenders",
@@ -10,6 +10,15 @@
       "artifactKind": "completed custom collector dataset run",
       "runStatus": "healthy",
       "published": 4
+    },
+    {
+      "slug": "australia-vendorpanel-tenders",
+      "collectorId": "c_msyxk9sd1olj4rz9i9",
+      "artifact": "australia-vendorpanel/run-live.json",
+      "artifactKind": "completed Bright Data custom collector dataset run",
+      "runStatus": "healthy",
+      "published": 50,
+      "archivedShape": "one tender nested per immutable page wrapper; flattened after archival"
     },
     {
       "slug": "california-cca-procurement",
@@ -34,7 +43,7 @@
       "artifact": "eu-ted/run-live.json",
       "artifactKind": "completed official public API scraper run",
       "runStatus": "healthy",
-      "published": 4500
+      "published": 39593
     },
     {
       "slug": "canada-quebec-seao",

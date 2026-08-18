@@ -25,6 +25,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "cheerio": "^1.2.0",
+    "compression": "^1.8.1",
     "csv-parse": "^7.0.2",
     "date-fns": "latest",
     "date-fns-tz": "latest",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@eslint/js": "latest",
     "@playwright/test": "latest",
+    "@types/compression": "^1.8.1",
     "@types/express": "latest",
     "@types/node": "latest",
     "@types/pg": "latest",

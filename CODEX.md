@@ -13,6 +13,8 @@
 Use these existing Scraper Studio collectors. Do not rebuild them in a new session:
 
 - Australian Sustainability Leaders tenders: `c_msxxrkb9zckaljn0a` (canonical opportunity feed)
+- MERX Canadian open solicitations: `c_msywoiwt25k5frwn95` (warning-only; second same-ID heal exhausted its 900-second validation window)
+- VendorPanel Australian public tenders: `c_msyxk9sd1olj4rz9i9` (canonical opportunity feed)
 - California Community Choice Association procurement: `c_msxy8dx318cy3aekq5` (canonical opportunity feed)
 - Airports Authority of India publication index: `c_msxulljug99b25hby` (auxiliary/healing proof only; never publish as contract opportunities)
 

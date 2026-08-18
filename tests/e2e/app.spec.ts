@@ -9,8 +9,8 @@ test("core opportunity workflow", async ({ page }) => {
   expect(opportunityBody.provenance).toBe("recorded_live");
   expect(opportunityBody.data.length).toBeGreaterThan(5000);
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
+  await expect(page.getByRole("complementary")).toHaveCount(0);
   await page.getByLabel("Status filter").selectOption("all");
-  await page.getByLabel("Close detail").click();
   await expect(page.getByText("NSW Roadmap - Tender Round 9").first()).toBeVisible();
   await page.getByText("NSW Roadmap - Tender Round 9").first().click();
   await page.getByRole("button", { name: "Raw" }).click();
@@ -28,22 +28,25 @@ test("core opportunity workflow", async ({ page }) => {
 
 test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
-  await expect(page.getByText("7002 opportunities")).toBeVisible();
+  const response = await page.request.get("/api/opportunities");
+  const opportunities = (await response.json()) as { data: Array<{ status: string }> };
+  const openCount = opportunities.data.filter((item) => item.status === "open").length;
+  await expect(page.getByText(`${openCount} opportunities`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Find more opportunities" })).toBeEnabled();
-  await page.getByLabel("Close detail").click();
   await page.locator(".advanced-filters summary").click();
   await page.getByLabel("Buyer or agency").fill("Transportation");
-  await expect(page.locator(".result-count strong")).not.toHaveText("7002");
+  await expect(page.locator(".result-count strong")).not.toHaveText(String(openCount));
   await page.getByRole("button", { name: "Clear advanced filters" }).click();
   await page.getByLabel("Status filter").selectOption("all");
   await page.getByLabel("Country filter").selectOption("AU");
   await expect(page.getByText("Capacity Investment Scheme NEM Dispatchable").first()).toBeVisible();
   await page.getByRole("button", { name: "Operations" }).click();
   await expect(page.getByRole("heading", { name: "Sources", exact: true })).toBeVisible();
-  const response = await page.request.get("/api/sources");
-  expect(response.ok()).toBe(true);
-  const body = (await response.json()) as {
+  const sourceResponse = await page.request.get("/api/sources");
+  expect(sourceResponse.ok()).toBe(true);
+  const body = (await sourceResponse.json()) as {
     data: Array<{ slug: string; latestRun: { validRowCount: number; metrics: { dateParseRate: number } } | null }>;
   };
   const asl = body.data.find((source) => source.slug === "australia-asl-tenders");
@@ -51,6 +54,7 @@ test("filters and one-click live operations", async ({ page }) => {
   expect(asl?.latestRun?.metrics.dateParseRate).toBe(1);
   await expect(page.getByRole("button", { name: "Run all live sources" })).toBeEnabled();
   await expect(page.getByText("CanadaBuys tender opportunities")).toBeVisible();
+  await expect(page.getByText("VendorPanel Australian public tenders")).toBeVisible();
   await expect(page.getByText("Québec SEAO open calls for tenders")).toBeVisible();
   await expect(page.getByText("Texas DOT official bid projects")).toBeVisible();
   await expect(page.getByText("Los Angeles RAMP open bid opportunities")).toBeVisible();
@@ -65,7 +69,8 @@ test("filters and one-click live operations", async ({ page }) => {
   await expect(page.getByText("342 rows · 342 valid")).toBeVisible();
   await expect(page.getByText("391 rows · 391 valid")).toBeVisible();
   await expect(page.getByText("89 rows · 89 valid")).toBeVisible();
-  await expect(page.getByText("4500 rows · 4500 valid")).toBeVisible();
+  await expect(page.getByText("39593 rows · 39593 valid")).toBeVisible();
+  await expect(page.getByText("50 rows · 50 valid")).toBeVisible();
   await expect(page.getByText("2 verified scraper repairs")).toBeVisible();
   await expect(page.getByLabel("Operator secret")).toHaveCount(0);
 });

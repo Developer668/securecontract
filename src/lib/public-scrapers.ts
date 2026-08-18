@@ -90,7 +90,7 @@ export function tedRows(notices: TedNotice[], source: SourceConfig) {
     );
 }
 
-async function scrapeTedSource(source: SourceConfig, targetRows = 4_500) {
+async function scrapeTedSource(source: SourceConfig, targetRows = 97_000) {
   const fields = [
     "publication-number",
     "notice-title",
@@ -103,6 +103,7 @@ async function scrapeTedSource(source: SourceConfig, targetRows = 4_500) {
   const seen = new Set<string>();
   const limit = 250;
   const maxPages = Math.ceil(targetRows / limit) + 4;
+  let iterationNextToken: string | undefined;
 
   for (let page = 1; page <= maxPages && rows.length < targetRows; page += 1) {
     const response = await fetch(source.inputUrl, {
@@ -112,13 +113,16 @@ async function scrapeTedSource(source: SourceConfig, targetRows = 4_500) {
       body: JSON.stringify({
         query: `deadline-receipt-tender-date-lot >= ${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`,
         fields,
-        page,
         limit,
-        paginationMode: "PAGE_NUMBER",
+        paginationMode: "ITERATION",
+        ...(iterationNextToken ? { iterationNextToken } : {}),
       }),
     });
     if (!response.ok) throw new Error(`TED search failed with HTTP ${response.status}`);
-    const payload = (await response.json()) as { notices?: TedNotice[] };
+    const payload = (await response.json()) as {
+      notices?: TedNotice[];
+      iterationNextToken?: string;
+    };
     const pageRows = tedRows(payload.notices ?? [], source);
     if (!pageRows.length) break;
     for (const row of pageRows) {
@@ -127,6 +131,8 @@ async function scrapeTedSource(source: SourceConfig, targetRows = 4_500) {
       rows.push(row);
       if (rows.length >= targetRows) break;
     }
+    iterationNextToken = payload.iterationNextToken;
+    if (!iterationNextToken) break;
   }
   return rows;
 }
