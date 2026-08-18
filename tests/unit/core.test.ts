@@ -48,6 +48,23 @@ describe('public source parsers',()=>{
     expect(row).toMatchObject({title:'Transit engineering services',solicitation_id:'20260818001',organization:'Transportation',status_raw:'Open'});
     expect(row).not.toHaveProperty('contact_name');
   });
+  it('maps Québec SEAO OCDS releases',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='canada-quebec-seao')!;
+    const input=JSON.stringify({releases:[{ocid:'ocds-qc-1',date:'2026-08-18T12:00:00-04:00',buyer:{name:'Ville de Québec'},tender:{id:'QC-1',title:'Services professionnels',status:'active',procurementMethodDetails:'Avis d’appel d’offres',tenderPeriod:{endDate:'2026-09-18T15:00:00-04:00'},documents:[{url:'https://seao.gouv.qc.ca/avis/1'}]}}]});
+    expect(publicScraperParsers.quebecSeaoRows(input,source)[0]).toMatchObject({title:'Services professionnels',solicitation_id:'QC-1',organization:'Ville de Québec',status_raw:'Open'});
+  });
+  it('deduplicates Texas DOT bid items by project',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='us-texas-dot-bids')!;
+    const input=JSON.stringify([{project_id:'TX-1',project_number:'STP-1',project_classification:'Safety Improvements',highway:'US 54',county:'El Paso',proposal_status:'Official',bid_type_description:'Low Bid',proposal_published_date:'2026-08-18T09:00:00.000',bid_recieved_until_date_and:'2026-09-18T13:00:00.000'},{project_id:'TX-1',project_number:'STP-1'}]);
+    const rows=publicScraperParsers.texasDotRows(input,source);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({title:'Safety Improvements · US 54 · El Paso County',solicitation_id:'TX-1',organization:'Texas Department of Transportation'});
+  });
+  it('maps Los Angeles RAMP open bids',()=>{
+    const source=liveSources.find(candidate=>candidate.slug==='us-los-angeles-ramp')!;
+    const input=JSON.stringify([{title:'Fleet maintenance',rampid:'LA-1',department:'General Services',stagename:'Open',type:'RFP',bidpost:'2026-08-18T10:00:00.000',closedate:'2026-09-18T18:00:00.000',url:{url:'https://www.rampla.org/opportunities/LA-1'}}]);
+    expect(publicScraperParsers.losAngelesRows(input,source)[0]).toMatchObject({title:'Fleet maintenance',solicitation_id:'LA-1',organization:'General Services',status_raw:'Open'});
+  });
   it('maps multilingual TED notices and keeps the latest open lot deadline',()=>{
     const source=liveSources.find(candidate=>candidate.slug==='eu-ted-open-notices')!;
     const rows=publicScraperParsers.tedRows([{'publication-number':'123-2026','notice-title':{eng:'Rail engineering services'},'buyer-name':{eng:['European Rail Agency']},'form-type':'competition','publication-date':'2026-08-18Z','deadline-receipt-tender-date-lot':['2026-08-01+02:00','2027-01-10+01:00']}],source);

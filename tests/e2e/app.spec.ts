@@ -29,12 +29,12 @@ test("core opportunity workflow", async ({ page }) => {
 test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
-  await expect(page.getByText("5578 opportunities")).toBeVisible();
+  await expect(page.getByText("7002 opportunities")).toBeVisible();
   await expect(page.getByRole("button", { name: "Find more opportunities" })).toBeEnabled();
   await page.getByLabel("Close detail").click();
   await page.locator(".advanced-filters summary").click();
   await page.getByLabel("Buyer or agency").fill("Transportation");
-  await expect(page.locator(".result-count strong")).not.toHaveText("5578");
+  await expect(page.locator(".result-count strong")).not.toHaveText("7002");
   await page.getByRole("button", { name: "Clear advanced filters" }).click();
   await page.getByLabel("Status filter").selectOption("all");
   await page.getByLabel("Country filter").selectOption("AU");
@@ -51,13 +51,19 @@ test("filters and one-click live operations", async ({ page }) => {
   expect(asl?.latestRun?.metrics.dateParseRate).toBe(1);
   await expect(page.getByRole("button", { name: "Run all live sources" })).toBeEnabled();
   await expect(page.getByText("CanadaBuys tender opportunities")).toBeVisible();
+  await expect(page.getByText("Québec SEAO open calls for tenders")).toBeVisible();
+  await expect(page.getByText("Texas DOT official bid projects")).toBeVisible();
+  await expect(page.getByText("Los Angeles RAMP open bid opportunities")).toBeVisible();
   await expect(page.getByText("EU TED open procurement notices")).toBeVisible();
   await expect(page.getByText("City of Chicago active solicitations")).toBeVisible();
   await expect(page.getByText("New York City current bids")).toBeVisible();
   await expect(page.getByText("Montgomery County active solicitations")).toBeVisible();
   await expect(page.getByText("San Francisco open bid opportunities")).toBeVisible();
   await expect(page.getByRole("button", { name: "Source unavailable" })).toBeDisabled();
-  await expect(page.getByText("883 rows · 883 valid")).toBeVisible();
+  await expect(page.getByText("882 rows · 882 valid")).toBeVisible();
+  await expect(page.getByText("700 rows · 700 valid")).toBeVisible();
+  await expect(page.getByText("342 rows · 342 valid")).toBeVisible();
+  await expect(page.getByText("391 rows · 391 valid")).toBeVisible();
   await expect(page.getByText("89 rows · 89 valid")).toBeVisible();
   await expect(page.getByText("4500 rows · 4500 valid")).toBeVisible();
   await expect(page.getByText("2 verified scraper repairs")).toBeVisible();

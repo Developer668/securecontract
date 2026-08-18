@@ -18,6 +18,8 @@
     "db:seed": "tsx scripts/seed-sources.ts",
     "replay:build": "tsx scripts/build-recorded-replay.ts",
     "capture:public": "tsx scripts/capture-public-sources.ts",
+    "scraper:run": "tsx scripts/capture-public-sources.ts",
+    "self-heal:demo": "tsx scripts/show-healing-proof.ts",
     "verify:nim": "tsx --env-file=.env.local scripts/verify-nim.ts"
   },
   "dependencies": {

@@ -30,6 +30,7 @@ const postgres = process.env.DATABASE_URL
   ? new PostgresRepository(process.env.DATABASE_URL)
   : null;
 const recordedLiveMode = !postgres && process.env.DEMO_MODE === "recorded-live";
+const MAX_CANONICAL_OPPORTUNITIES = 99_000;
 const memoryStore = new MemoryIngestionStore();
 const runtimeSources: SourceConfig[] = [
   ...(recordedLiveMode ? liveSources : demonstrationSources),
@@ -92,13 +93,31 @@ if (recordedLiveMode) {
       id: "recorded-canadabuys-public-run",
       sourceId: "21000000-0000-4000-8000-000000000004",
       collectionId: "public-canadabuys-recorded-live",
-      rowCount: 883,
+      rowCount: 882,
     },
     {
       id: "recorded-ted-public-run",
       sourceId: "21000000-0000-4000-8000-000000000009",
       collectionId: "public-ted-recorded-live",
       rowCount: 4500,
+    },
+    {
+      id: "recorded-quebec-seao-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000010",
+      collectionId: "public-quebec-seao-recorded-live",
+      rowCount: 700,
+    },
+    {
+      id: "recorded-texas-dot-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000011",
+      collectionId: "public-texas-dot-recorded-live",
+      rowCount: 342,
+    },
+    {
+      id: "recorded-los-angeles-public-run",
+      sourceId: "21000000-0000-4000-8000-000000000012",
+      collectionId: "public-los-angeles-recorded-live",
+      rowCount: 391,
     },
     {
       id: "recorded-chicago-public-run",
@@ -178,7 +197,9 @@ const listOpportunities = async () =>
   (postgres
     ? await postgres.listOpportunities()
     : [...memoryStore.opportunities.values()]
-  ).map((opportunity) => closeExpiredOpportunity(opportunity));
+  )
+    .slice(0, MAX_CANONICAL_OPPORTUNITIES)
+    .map((opportunity) => closeExpiredOpportunity(opportunity));
 app.get("/api/health", (_request, response) =>
   response.json({
     ok: true,

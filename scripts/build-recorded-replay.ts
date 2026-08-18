@@ -22,6 +22,9 @@ const canadaRows = readJson<unknown[]>(
   "fixtures/recorded-live/canada-canadabuys/run-live.json",
 );
 const tedRows = readJson<unknown[]>("fixtures/recorded-live/eu-ted/run-live.json");
+const quebecRows = readJson<unknown[]>("fixtures/recorded-live/canada-quebec-seao/run-live.json");
+const texasRows = readJson<unknown[]>("fixtures/recorded-live/us-texas-dot/run-live.json");
+const losAngelesRows = readJson<unknown[]>("fixtures/recorded-live/us-los-angeles/run-live.json");
 const chicagoRows = readJson<unknown[]>(
   "fixtures/recorded-live/us-chicago/run-live.json",
 );
@@ -34,11 +37,14 @@ const ccaSource = liveSources.find((source) => source.slug === "california-cca-p
 const aaiSource = liveSources.find((source) => source.slug === "india-aai-publications");
 const canadaSource = liveSources.find((source) => source.slug === "canada-canadabuys");
 const tedSource = liveSources.find((source) => source.slug === "eu-ted-open-notices");
+const quebecSource = liveSources.find((source) => source.slug === "canada-quebec-seao");
+const texasSource = liveSources.find((source) => source.slug === "us-texas-dot-bids");
+const losAngelesSource = liveSources.find((source) => source.slug === "us-los-angeles-ramp");
 const chicagoSource = liveSources.find((source) => source.slug === "us-chicago-solicitations");
 const nycSource = liveSources.find((source) => source.slug === "us-nyc-current-bids");
 const montgomerySource = liveSources.find((source) => source.slug === "us-montgomery-solicitations");
 const sanFranciscoSource = liveSources.find((source) => source.slug === "us-san-francisco-bids");
-if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
+if (!aslSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !quebecSource || !texasSource || !losAngelesSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
   throw new Error("Recorded source configuration is incomplete");
 
 const aslResult = await ingestRows({
@@ -66,6 +72,27 @@ const tedResult = await ingestRows({
   source: tedSource,
   collectionId: "public-ted-recorded-live",
   rows: tedRows,
+  store,
+  observedAt,
+});
+const quebecResult = await ingestRows({
+  source: quebecSource,
+  collectionId: "public-quebec-seao-recorded-live",
+  rows: quebecRows,
+  store,
+  observedAt,
+});
+const texasResult = await ingestRows({
+  source: texasSource,
+  collectionId: "public-texas-dot-recorded-live",
+  rows: texasRows,
+  store,
+  observedAt,
+});
+const losAngelesResult = await ingestRows({
+  source: losAngelesSource,
+  collectionId: "public-los-angeles-recorded-live",
+  rows: losAngelesRows,
   store,
   observedAt,
 });
@@ -111,12 +138,13 @@ const aaiValidCount = aaiContractRows.filter(
     URL.canParse(row.document_url),
 ).length;
 
-const opportunities = [...store.opportunities.values()].map((opportunity) => ({
+const MAX_CANONICAL_OPPORTUNITIES = 99_000;
+const opportunities = [...store.opportunities.values()].slice(0, MAX_CANONICAL_OPPORTUNITIES).map((opportunity) => ({
   ...opportunity,
   raw: {
     ...opportunity.raw,
     extraction_evidence:
-      [canadaSource.id, tedSource.id, chicagoSource.id, nycSource.id, montgomerySource.id, sanFranciscoSource.id].includes(opportunity.sourceId)
+      [canadaSource.id, tedSource.id, quebecSource.id, texasSource.id, losAngelesSource.id, chicagoSource.id, nycSource.id, montgomerySource.id, sanFranciscoSource.id].includes(opportunity.sourceId)
         ? "Completed public-page scraper run"
         : "Completed Bright Data custom collector dataset run",
   },
@@ -166,6 +194,30 @@ writeFileSync(
           artifactKind: "completed official public API scraper run",
           runStatus: tedResult.run.status,
           published: tedResult.published.length,
+        },
+        {
+          slug: quebecSource.slug,
+          collectorId: null,
+          artifact: "canada-quebec-seao/run-live.json",
+          artifactKind: "completed official OCDS public-data scraper run",
+          runStatus: quebecResult.run.status,
+          published: quebecResult.published.length,
+        },
+        {
+          slug: texasSource.slug,
+          collectorId: null,
+          artifact: "us-texas-dot/run-live.json",
+          artifactKind: "completed official public API scraper run",
+          runStatus: texasResult.run.status,
+          published: texasResult.published.length,
+        },
+        {
+          slug: losAngelesSource.slug,
+          collectorId: null,
+          artifact: "us-los-angeles/run-live.json",
+          artifactKind: "completed official public API scraper run",
+          runStatus: losAngelesResult.run.status,
+          published: losAngelesResult.published.length,
         },
         {
           slug: chicagoSource.slug,
@@ -236,6 +288,9 @@ console.log(
     aaiContractValidRows: aaiValidCount,
     canadaStatus: canadaResult.run.status,
     tedStatus: tedResult.run.status,
+    quebecStatus: quebecResult.run.status,
+    texasStatus: texasResult.run.status,
+    losAngelesStatus: losAngelesResult.run.status,
     chicagoStatus: chicagoResult.run.status,
     nycStatus: nycResult.run.status,
     montgomeryStatus: montgomeryResult.run.status,

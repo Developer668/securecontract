@@ -8,16 +8,20 @@ import { normalizeStatus, parseLocalDate, statusAtDeadline } from "./normalizati
 const execFileAsync = promisify(execFile);
 
 async function fetchHtml(url: string) {
-  const response = await fetch(url, {
-    redirect: "follow",
-    signal: AbortSignal.timeout(20_000),
-    headers: {
-      Accept: "text/html,application/xhtml+xml",
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36",
-    },
-  });
-  if (response.ok) return response.text();
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(20_000),
+      headers: {
+        Accept: "text/html,application/xhtml+xml,application/json,text/csv",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+      },
+    });
+    if (response.ok) return response.text();
+  } catch {
+    // Retry public endpoints with curl when Node TLS/connectivity is rejected.
+  }
 
   // CanadaBuys currently rejects Node's TLS fingerprint while serving the same
   // public, anonymous HTML to browsers and curl. The fixed argument list keeps
@@ -25,7 +29,7 @@ async function fetchHtml(url: string) {
   const { stdout } = await execFileAsync(
     "curl",
     ["--compressed", "--fail", "--location", "--silent", "--show-error", url],
-    { maxBuffer: 24 * 1024 * 1024, timeout: 30_000 },
+    { maxBuffer: 32 * 1024 * 1024, timeout: 45_000 },
   );
   return stdout;
 }
@@ -311,6 +315,118 @@ function sanFranciscoRows(text: string, source: SourceConfig) {
     );
 }
 
+function losAngelesRows(text: string, source: SourceConfig) {
+  return jsonRows(text)
+    .map((row) => ({
+      title: stringValue(row.title),
+      solicitation_id: stringValue(row.rampid),
+      organization: stringValue(row.department) || "Los Angeles public agency",
+      status_raw: stringValue(row.stagename) || "Open",
+      procedure_type_raw: stringValue(row.type) || stringValue(row.category),
+      published_date_raw: publicDate(row.bidpost),
+      closing_date_raw: publicDate(row.closedate),
+      brief_description: stringValue(row.category) || undefined,
+      detail_url: nestedUrl(row.url) || source.sourceUrl,
+      source_url: source.sourceUrl,
+    }))
+    .filter(
+      (row) =>
+        row.title &&
+        row.solicitation_id &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+function texasDotRows(text: string, source: SourceConfig) {
+  const projects = new Map<string, JsonRow>();
+  for (const row of jsonRows(text)) {
+    const projectId = stringValue(row.project_id);
+    if (projectId && !projects.has(projectId)) projects.set(projectId, row);
+  }
+  return [...projects.values()]
+    .map((row) => {
+      const projectId = stringValue(row.project_id);
+      const projectNumber = stringValue(row.project_number);
+      const classification = stringValue(row.project_classification);
+      const highway = stringValue(row.highway);
+      const county = stringValue(row.county);
+      return {
+        title:
+          [classification || stringValue(row.project_type), highway, county && `${county} County`]
+            .filter(Boolean)
+            .join(" · ") || `TxDOT project ${projectNumber || projectId}`,
+        solicitation_id: projectId,
+        organization: "Texas Department of Transportation",
+        status_raw: /official|unofficial/i.test(stringValue(row.proposal_status))
+          ? "Open"
+          : stringValue(row.proposal_status) || "Open",
+        procedure_type_raw: stringValue(row.bid_type_description) || stringValue(row.let_type),
+        published_date_raw: publicDate(row.proposal_published_date),
+        closing_date_raw: publicDate(row.bid_recieved_until_date_and),
+        brief_description: projectNumber ? `Project ${projectNumber}` : undefined,
+        detail_url: `https://data.texas.gov/resource/qh8x-rm8r.json?project_id=${encodeURIComponent(projectId)}`,
+        source_url: source.sourceUrl,
+      };
+    })
+    .filter(
+      (row) =>
+        row.title &&
+        row.solicitation_id &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+type SeaoPackage = {
+  releases?: Array<{
+    ocid?: string;
+    date?: string;
+    buyer?: { name?: string };
+    tender?: {
+      id?: string;
+      title?: string;
+      status?: string;
+      procurementMethodDetails?: string;
+      mainProcurementCategory?: string;
+      tenderPeriod?: { startDate?: string; endDate?: string };
+      documents?: Array<{ url?: string }>;
+    };
+  }>;
+};
+
+function quebecSeaoRows(text: string, source: SourceConfig) {
+  const releases = (JSON.parse(text) as SeaoPackage).releases ?? [];
+  return releases
+    .map((release) => ({
+      title: release.tender?.title?.trim() ?? "",
+      solicitation_id: release.tender?.id || release.ocid || "",
+      organization: release.buyer?.name?.trim() || "Québec public buyer",
+      status_raw: release.tender?.status === "active" ? "Open" : release.tender?.status,
+      procedure_type_raw:
+        release.tender?.procurementMethodDetails || release.tender?.mainProcurementCategory,
+      published_date_raw: release.tender?.tenderPeriod?.startDate || release.date,
+      closing_date_raw: release.tender?.tenderPeriod?.endDate,
+      detail_url: release.tender?.documents?.find((document) => document.url)?.url || source.sourceUrl,
+      source_url: source.sourceUrl,
+    }))
+    .filter(
+      (row) =>
+        row.title &&
+        row.solicitation_id &&
+        isOpenAtCollection(row.status_raw, row.closing_date_raw, source),
+    );
+}
+
+async function scrapeQuebecSeao(source: SourceConfig) {
+  const metadata = JSON.parse(await fetchHtml(source.inputUrl)) as {
+    result?: { resources?: Array<{ name?: string; url?: string; format?: string; last_modified?: string }> };
+  };
+  const latest = (metadata.result?.resources ?? [])
+    .filter((resource) => resource.format === "JSON" && /^hebdo_\d{8}_\d{8}\.json$/.test(resource.name ?? ""))
+    .sort((left, right) => (right.last_modified ?? "").localeCompare(left.last_modified ?? ""))[0];
+  if (!latest?.url) throw new Error("Québec SEAO did not publish a current weekly JSON resource");
+  return quebecSeaoRows(await fetchHtml(latest.url), source);
+}
+
 function sourceRequestUrl(source: SourceConfig) {
   const url = new URL(source.inputUrl);
   if (source.slug === "us-nyc-current-bids") {
@@ -328,17 +444,25 @@ function sourceRequestUrl(source: SourceConfig) {
   if (source.slug === "us-san-francisco-bids") {
     url.searchParams.set("$limit", "2000");
   }
+  if (source.slug === "us-texas-dot-bids") url.searchParams.set("$limit", "10000");
+  if (source.slug === "us-los-angeles-ramp") {
+    url.searchParams.set("$limit", "5000");
+    url.searchParams.set("$order", "closedate ASC");
+  }
   return url.toString();
 }
 
 export async function scrapePublicSource(source: SourceConfig) {
   if (source.slug === "eu-ted-open-notices") return scrapeTedSource(source);
+  if (source.slug === "canada-quebec-seao") return scrapeQuebecSeao(source);
   const html = await fetchHtml(sourceRequestUrl(source));
   if (source.slug === "canada-canadabuys") return canadaBuysRows(html, source);
   if (source.slug === "us-chicago-solicitations") return chicagoRows(html, source);
   if (source.slug === "us-nyc-current-bids") return nycRows(html, source);
   if (source.slug === "us-montgomery-solicitations") return montgomeryRows(html, source);
   if (source.slug === "us-san-francisco-bids") return sanFranciscoRows(html, source);
+  if (source.slug === "us-texas-dot-bids") return texasDotRows(html, source);
+  if (source.slug === "us-los-angeles-ramp") return losAngelesRows(html, source);
   throw new Error(`No public scraper is registered for ${source.slug}`);
 }
 
@@ -349,4 +473,7 @@ export const publicScraperParsers = {
   montgomeryRows,
   sanFranciscoRows,
   tedRows,
+  quebecSeaoRows,
+  texasDotRows,
+  losAngelesRows,
 };

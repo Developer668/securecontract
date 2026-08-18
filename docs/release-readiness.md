@@ -1,6 +1,6 @@
 # Release readiness ledger
 
-Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
+Verified 2026-08-18. `PASS` means the behavior was executed, not inferred.
 
 ## Real sources
 
@@ -9,10 +9,13 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 | Australian Sustainability Leaders tenders | Australia / national program | `c_msxxrkb9zckaljn0a` | 4 | Healthy / active |
 | Airports Authority of India publication index | India / AAI | `c_msxulljug99b25hby` | 234 publication rows | Warning: auxiliary index, not canonical opportunities |
 | California Community Choice Association | United States / California | `c_msxy8dx318cy3aekq5` | 1 | Healthy / active |
-| CanadaBuys open tender notices | Canada / national | Official daily CSV | 883 | Healthy / active |
+| CanadaBuys open tender notices | Canada / national | Official daily CSV | 882 | Healthy / active |
+| Québec SEAO open contracting notices | Canada / Québec | Official weekly OCDS JSON | 700 | Healthy / active |
 | Tenders Electronic Daily | European Union / regional | Official TED Search API | 4,500 | Healthy / active |
 | City of Chicago active solicitations | United States / Chicago | Official public table | 25 last known good | Warning: official endpoint unavailable |
-| Current NYC bids | United States / New York City | NYC Open Data API | 88 | Healthy / active |
+| Texas DOT official bid items | United States / Texas | Texas Open Data API | 342 | Healthy / active |
+| Los Angeles RAMP open bids | United States / Los Angeles | LA Open Data API | 391 | Healthy / active |
+| Current NYC bids | United States / New York City | NYC Open Data API | 89 | Healthy / active |
 | Montgomery County solicitations | United States / Maryland | dataMontgomery API | 13 | Healthy / active |
 | San Francisco open bid opportunities | United States / San Francisco | DataSF API | 86 | Healthy / active |
 
@@ -31,7 +34,7 @@ Verified 2026-08-17. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 5,583 accepted opportunities; the auxiliary AAI index is not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 7,007 accepted opportunities, with a hard ceiling of 99,000; the auxiliary AAI index is not silently promoted.
 
 ## NVIDIA NIM
 
@@ -43,7 +46,7 @@ The server-only provider, grounded context pack, structured output validation, c
 |---|---|
 | Lint | PASS |
 | Typecheck | PASS |
-| Unit/contract/integration tests | PASS — 24 tests |
+| Unit/contract/integration tests | PASS — 28 tests |
 | Desktop/mobile E2E | PASS — 4 tests |
 | Safari visual verification | PASS |
 | Live NVIDIA NIM verification | PASS |

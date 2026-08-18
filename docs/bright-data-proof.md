@@ -10,7 +10,7 @@ The Bright Data CLI was authenticated and verified on 2026-08-17 with `@brightda
 | Australian Sustainability Leaders tenders | https://asl.org.au/tenders | `c_msxxrkb9zckaljn0a` | Completed run, response `d2t1787014014069rrj38shevv9o` | 4 | title, type, status, open/closing dates, detail/source URL | Raw closing text includes a later phase label; the adapter preserves it and parses the leading timestamp |
 | California Community Choice Association procurement | https://ccauthority.org/bid-opportunites/ | `c_msxy8dx318cy3aekq5` | Completed post-heal run, response `d2t1787014744903r0r6ggh7kkeg` | 1 | project ID/title, site, location, status, optional dates, URLs | Bright still returned a nested wrapper after same-ID heal; SecureContract archives it unchanged, then flattens it at the adapter boundary |
 
-CanadaBuys and City of Chicago were also attempted in Scraper Studio. CanadaBuys generation failed twice and Chicago returned `Domain not allowed`; the repository preserves those creation envelopes. SecureContract therefore collects official anonymous government feeds with registered public-source adapters rather than inventing Collector IDs. CanadaBuys produced 883 valid open rows; the paginated EU TED API adds 4,500 open notices, while NYC, Montgomery County, and San Francisco add official API-backed US coverage. Chicago is warning-only while its endpoint is unavailable.
+CanadaBuys and City of Chicago were also attempted in Scraper Studio. CanadaBuys generation failed twice and Chicago returned `Domain not allowed`; the repository preserves those creation envelopes. Fresh 2026-08-18 attempts for AusTender (`c_msyvb8wtuav1vzclp`) and South Australia (`c_msyvetvrdnfw4nctu`) were likewise rejected as `Domain not allowed`, and their envelopes are retained without representing either as collected data. SecureContract therefore collects official anonymous government feeds with registered public-source adapters rather than inventing Collector IDs. CanadaBuys produced 882 valid open rows, Québec SEAO 700, Texas DOT 342, Los Angeles RAMP 391, NYC 89, Montgomery County 13, San Francisco 86, and the paginated EU TED API 4,500. Chicago is warning-only while its endpoint is unavailable.
 
 The first baseline returned 234 document URLs with empty nested `publications` arrays. This was archived as a failed extraction, repaired with the real Self-Healing flow, explicitly reviewed/approved, and rerun successfully under the same Collector ID. See [healing-proof.md](healing-proof.md).
 
@@ -22,6 +22,8 @@ The first baseline returned 234 document URLs with empty nested `publications` a
 - `fixtures/recorded-live/india-aai/post-heal.json` — 234 corrected raw rows
 - `fixtures/recorded-live/australia-asl/create-v3.json` — successful fresh custom collector creation envelope
 - `fixtures/recorded-live/australia-asl/run-v3.json` — completed 4-row dataset output
+- `fixtures/recorded-live/australia-austender/create.json` — rejected `Domain not allowed` creation envelope
+- `fixtures/recorded-live/australia-sa/create.json` — rejected `Domain not allowed` creation envelope
 - `fixtures/recorded-live/australia-asl/heal-proposal.json` — actual Scraper Studio extraction preview
 - `fixtures/recorded-live/california-cca/heal-proposal.json` — actual Scraper Studio extraction preview
 - `fixtures/recorded-live/california-cca/create-v3.json` — successful fresh collector creation

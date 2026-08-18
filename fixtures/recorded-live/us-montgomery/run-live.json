@@ -1,5 +1,16 @@
 [
   {
+    "title": "Residential Refuse & Recyclable Materials Collection Services, Service Area 4",
+    "solicitation_id": "1191540",
+    "organization": "Department of Environmental Protection",
+    "status_raw": "Active",
+    "procedure_type_raw": "RFP",
+    "published_date_raw": "2026-05-21T00:00:00.000",
+    "closing_date_raw": "",
+    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
+    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
+  },
+  {
     "title": "Residential Refuse, Recyclable Materials, Yard Trim, and Scrap Metal/e-Waste Collection Services in Service Area 6",
     "solicitation_id": "1131334",
     "organization": "Department of Environmental Protection",
@@ -22,39 +33,6 @@
     "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
   },
   {
-    "title": "Operation of MCDOT TRiPS Commuter Stores",
-    "solicitation_id": "1193152",
-    "organization": "Department of Transportation",
-    "status_raw": "Active",
-    "procedure_type_raw": "RFP",
-    "published_date_raw": "2026-08-07T00:00:00.000",
-    "closing_date_raw": "2026-09-11T00:00:00.000",
-    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
-    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
-  },
-  {
-    "title": "County-Wide Contract Security Officer Services",
-    "solicitation_id": "1196087",
-    "organization": "Police",
-    "status_raw": "Active",
-    "procedure_type_raw": "RFP",
-    "published_date_raw": "2026-08-10T00:00:00.000",
-    "closing_date_raw": "2026-09-24T00:00:00.000",
-    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
-    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
-  },
-  {
-    "title": "Municipal Solid Waste Sorting and Recovery",
-    "solicitation_id": "1195755",
-    "organization": "Department of Environmental Protection",
-    "status_raw": "Active",
-    "procedure_type_raw": "RFP",
-    "published_date_raw": "2026-07-14T00:00:00.000",
-    "closing_date_raw": "2026-09-14T00:00:00.000",
-    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
-    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
-  },
-  {
     "title": "COUNTY COUNCIL BI-LINGUAL (ENGLISH/SPANISH) STAFF ASSISTANT SERVICES",
     "solicitation_id": "1201130",
     "organization": "County Council",
@@ -63,28 +41,6 @@
     "published_date_raw": "2026-08-07T00:00:00.000",
     "closing_date_raw": "2026-08-21T00:00:00.000",
     "brief_description": "Local Small Business Reserve Program",
-    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
-    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
-  },
-  {
-    "title": "Residential Refuse & Recyclable Materials Collection Services, Service Area 4",
-    "solicitation_id": "1191540",
-    "organization": "Department of Environmental Protection",
-    "status_raw": "Active",
-    "procedure_type_raw": "RFP",
-    "published_date_raw": "2026-05-21T00:00:00.000",
-    "closing_date_raw": "",
-    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
-    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
-  },
-  {
-    "title": "Energy Code Information Technology, Services & Consulting",
-    "solicitation_id": "1192419",
-    "organization": "Department of Permitting Services",
-    "status_raw": "Active",
-    "procedure_type_raw": "RFP",
-    "published_date_raw": "2026-06-23T00:00:00.000",
-    "closing_date_raw": "2026-08-21T00:00:00.000",
     "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
     "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
   },
@@ -122,6 +78,39 @@
     "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
   },
   {
+    "title": "Operation of MCDOT TRiPS Commuter Stores",
+    "solicitation_id": "1193152",
+    "organization": "Department of Transportation",
+    "status_raw": "Active",
+    "procedure_type_raw": "RFP",
+    "published_date_raw": "2026-08-07T00:00:00.000",
+    "closing_date_raw": "2026-09-11T00:00:00.000",
+    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
+    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
+  },
+  {
+    "title": "County-Wide Contract Security Officer Services",
+    "solicitation_id": "1196087",
+    "organization": "Police",
+    "status_raw": "Active",
+    "procedure_type_raw": "RFP",
+    "published_date_raw": "2026-08-10T00:00:00.000",
+    "closing_date_raw": "2026-09-24T00:00:00.000",
+    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
+    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
+  },
+  {
+    "title": "Energy Code Information Technology, Services & Consulting",
+    "solicitation_id": "1192419",
+    "organization": "Department of Permitting Services",
+    "status_raw": "Active",
+    "procedure_type_raw": "RFP",
+    "published_date_raw": "2026-06-23T00:00:00.000",
+    "closing_date_raw": "2026-08-21T00:00:00.000",
+    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
+    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
+  },
+  {
     "title": "Refuse and Recycling Collection Services for Various County Facilities",
     "solicitation_id": "1192172",
     "organization": "Department of General Services",
@@ -129,6 +118,17 @@
     "procedure_type_raw": "IFB",
     "published_date_raw": "2026-06-26T00:00:00.000",
     "closing_date_raw": "2026-08-28T00:00:00.000",
+    "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
+    "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
+  },
+  {
+    "title": "Municipal Solid Waste Sorting and Recovery",
+    "solicitation_id": "1195755",
+    "organization": "Department of Environmental Protection",
+    "status_raw": "Active",
+    "procedure_type_raw": "RFP",
+    "published_date_raw": "2026-07-14T00:00:00.000",
+    "closing_date_raw": "2026-09-14T00:00:00.000",
     "detail_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe",
     "source_url": "https://data.montgomerycountymd.gov/Government/Solicitations/eeq6-nnwe"
   },
