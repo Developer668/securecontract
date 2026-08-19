@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("core opportunity workflow", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Build your bid pipeline with context." })).toBeVisible();
+  await page.getByRole("button", { name: "Browse opportunities" }).click();
   await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
   const opportunityResponse = await page.request.get("/api/opportunities");
   expect(opportunityResponse.ok()).toBe(true);
@@ -21,19 +23,25 @@ test("core opportunity workflow", async ({ page }) => {
   const detail = page.getByRole("complementary");
   await expect(detail.getByRole("button", { name: "Workspace" })).toHaveCount(0);
   await detail.getByRole("button", { name: "Copilot", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Reason over this opportunity—not the open web." })).toBeVisible();
-  await expect(page.getByText("Evidence in scope")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask about this opportunity." })).toBeVisible();
+  await expect(page.getByText("Ask a specific question.")).toBeVisible();
+  await expect(page.getByText("Evidence in scope")).toHaveCount(0);
 });
 
 test("filters and one-click live operations", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Browse opportunities" }).click();
   await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByLabel("Status filter")).toHaveValue("open");
   const response = await page.request.get("/api/opportunities");
   const opportunities = (await response.json()) as { data: Array<{ status: string }> };
   const openCount = opportunities.data.filter((item) => item.status === "open").length;
   await expect(page.getByText(`${openCount} opportunities`)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Find more opportunities" })).toBeEnabled();
+  await expect(page.getByLabel("Results per page")).toHaveValue("50");
+  await page.getByLabel("Results per page").selectOption("5");
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("button", { name: "Previous" })).toBeEnabled();
   await page.locator(".advanced-filters summary").click();
   await page.getByLabel("Buyer or agency").fill("Transportation");
   await expect(page.locator(".result-count strong")).not.toHaveText(String(openCount));

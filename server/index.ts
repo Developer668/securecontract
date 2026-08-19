@@ -4,10 +4,6 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import {
-  opportunities as demonstrationOpportunities,
-  sources as demonstrationSources,
-} from "../src/data/demo.js";
 import { liveSources } from "../src/data/live-sources.js";
 import { BrightDataClient } from "../src/lib/bright-data/client.js";
 import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
@@ -16,18 +12,23 @@ import { assertPublicHttpUrl } from "../src/lib/security.js";
 import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 import { closeExpiredOpportunity } from "../src/lib/normalization.js";
 import { PostgresRepository } from "../db/repository.js";
-import type { SourceConfig } from "../src/types.js";
+import type { Opportunity, SourceConfig } from "../src/types.js";
 
 const app = express();
 app.use(compression());
 app.use(express.json({ limit: "1mb" }));
 const port = Number(process.env.API_PORT ?? 8787);
 let brightDataToken = process.env.BRIGHT_DATA_API_TOKEN;
-if (!brightDataToken && process.env.BRIGHT_DATA_CREDENTIALS_PATH) {
-  const credential = JSON.parse(
-    readFileSync(process.env.BRIGHT_DATA_CREDENTIALS_PATH, "utf8"),
-  ) as { api_key?: string };
-  brightDataToken = credential.api_key;
+const brightDataCredentialsPath = process.env.BRIGHT_DATA_CREDENTIALS_PATH;
+if (!brightDataToken && brightDataCredentialsPath && existsSync(brightDataCredentialsPath)) {
+  try {
+    const credential = JSON.parse(readFileSync(brightDataCredentialsPath, "utf8")) as {
+      api_key?: string;
+    };
+    brightDataToken = credential.api_key;
+  } catch {
+    console.warn("Bright Data credentials could not be read; live collector runs are disabled.");
+  }
 }
 const postgres = process.env.DATABASE_URL
   ? new PostgresRepository(process.env.DATABASE_URL)
@@ -35,18 +36,16 @@ const postgres = process.env.DATABASE_URL
 const recordedLiveMode = !postgres && process.env.DEMO_MODE === "recorded-live";
 const MAX_CANONICAL_OPPORTUNITIES = 99_000;
 const memoryStore = new MemoryIngestionStore();
-const runtimeSources: SourceConfig[] = [
-  ...(recordedLiveMode ? liveSources : demonstrationSources),
-];
+const runtimeSources: SourceConfig[] = [...liveSources];
 const replayPath = "fixtures/recorded-live/replay-opportunities.json.gz";
 const replayOpportunities =
   recordedLiveMode && existsSync(replayPath)
     ? (JSON.parse(
         gunzipSync(readFileSync(replayPath)).toString("utf8"),
-      ) as typeof demonstrationOpportunities)
+      ) as Opportunity[])
     : [];
-(recordedLiveMode ? replayOpportunities : demonstrationOpportunities).forEach(
-  (opportunity) => memoryStore.opportunities.set(opportunity.id, opportunity),
+replayOpportunities.forEach((opportunity) =>
+  memoryStore.opportunities.set(opportunity.id, opportunity),
 );
 if (recordedLiveMode) {
   memoryStore.runs.push({
@@ -202,13 +201,68 @@ const cron = (
 
 const listSources = async (): Promise<SourceConfig[]> =>
   postgres ? postgres.listSources() : runtimeSources;
-const listOpportunities = async () =>
+const listCanonicalOpportunities = async (): Promise<Opportunity[]> =>
   (postgres
     ? await postgres.listOpportunities()
     : [...memoryStore.opportunities.values()]
   )
-    .slice(0, MAX_CANONICAL_OPPORTUNITIES)
     .map((opportunity) => closeExpiredOpportunity(opportunity));
+const listOpportunities = async () =>
+  (await listCanonicalOpportunities()).slice(0, MAX_CANONICAL_OPPORTUNITIES);
+const NIM_BASE_URL = process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1";
+const DEFAULT_CHAT_MODEL = "deepseek-ai/deepseek-v4-flash-0731";
+type ChatModelMode = "non_reasoning" | "reasoning";
+type ChatModelOption = { id: string; mode: ChatModelMode };
+const REASONING_MODEL = /(?:reasoning|think(?:ing)?|deepseek-r1|qwq|gpt-oss|\bo[13]\b)/i;
+const NON_CHAT_MODEL = /(?:embed|rerank|reward|guard|safety|content-safety|topic-control|parse|detector|video|clip|fuyu|deplot|diffusion|kosmos|neva|vila|riva|vision|\bvl\b|translate)/i;
+const CHAT_MODEL_HINT = /(?:instruct|chat|llama|qwen|deepseek|mistral|mixtral|gemma|jamba|yi-large|dbrx|phi|nemotron|gpt-oss|minimax|kimi|laguna|step-|inkling|palmyra|glm|zamba|starcoder|codegemma|codestral)/i;
+const isChatModel = (id: string) => !NON_CHAT_MODEL.test(id) && CHAT_MODEL_HINT.test(id);
+let nvidiaModelsCache: { expiresAt: number; models: string[] } = {
+  expiresAt: 0,
+  models: [],
+};
+const nvidiaConfigured = () => Boolean(process.env.NVIDIA_API_KEY);
+const nvidiaApiKey = () => {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error("NVIDIA NIM not configured");
+  return apiKey;
+};
+const listChatModels = async () => {
+  if (!nvidiaConfigured()) return [];
+  if (nvidiaModelsCache.expiresAt > Date.now()) return nvidiaModelsCache.models;
+  try {
+    const response = await fetch(`${NIM_BASE_URL}/models`, {
+      headers: { Authorization: `Bearer ${nvidiaApiKey()}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) throw new Error(`NVIDIA models returned ${response.status}`);
+    const payload = (await response.json()) as { data?: Array<{ id?: string }> };
+    const models = [...new Set(
+      (payload.data ?? [])
+        .map((candidate) => candidate.id?.trim())
+        .filter((id): id is string => Boolean(id))
+        .filter(isChatModel),
+    )].sort((left, right) => left.localeCompare(right));
+    nvidiaModelsCache = {
+      expiresAt: Date.now() + 10 * 60_000,
+      models: models.length ? models : [DEFAULT_CHAT_MODEL],
+    };
+  } catch {
+    // Keep the assistant usable when NVIDIA's catalog endpoint is momentarily slow.
+    nvidiaModelsCache = {
+      expiresAt: Date.now() + 60_000,
+      models: [DEFAULT_CHAT_MODEL],
+    };
+  }
+  return nvidiaModelsCache.models;
+};
+const selectChatModel = async (requested?: string) => {
+  const models = await listChatModels();
+  if (!models.length) throw new Error("No NVIDIA chat models are available");
+  if (requested && !models.includes(requested))
+    throw new Error("That NVIDIA model is not in this account's catalog");
+  return requested ?? (models.includes(DEFAULT_CHAT_MODEL) ? DEFAULT_CHAT_MODEL : models[0]!);
+};
 app.get("/api/health", (_request, response) =>
   response.json({
     ok: true,
@@ -216,13 +270,23 @@ app.get("/api/health", (_request, response) =>
       ? "postgres"
       : recordedLiveMode
         ? "recorded-live"
-        : "demonstration",
+        : "unconfigured",
     brightDataConfigured: Boolean(brightDataToken),
-    nvidiaConfigured: Boolean(
-      process.env.NVIDIA_API_KEY && process.env.NVIDIA_NIM_MODEL,
-    ),
+    nvidiaConfigured: nvidiaConfigured(),
   }),
 );
+app.get("/api/copilot/models", async (_request, response) => {
+  if (!nvidiaConfigured())
+    return response.status(503).json({ error: "NVIDIA NIM not configured" });
+  const models = await listChatModels();
+  response.json({
+    data: models.map((id): ChatModelOption => ({
+      id,
+      mode: REASONING_MODEL.test(id) ? "reasoning" : "non_reasoning",
+    })),
+    defaultModel: models.includes(DEFAULT_CHAT_MODEL) ? DEFAULT_CHAT_MODEL : models[0]!,
+  });
+});
 app.get("/api/opportunities", async (_request, response) =>
   response.json({
     data: (await listOpportunities()).map((opportunity) => ({
@@ -236,16 +300,17 @@ app.get("/api/opportunities", async (_request, response) =>
       ? "postgres"
       : recordedLiveMode
         ? "recorded_live"
-        : "demonstration_fixture",
+        : "unconfigured",
     notice: postgres
       ? null
       : recordedLiveMode
-        ? "Timestamped replay from completed Bright Data and public-page scraper runs across the US, Canada, and Australia; run live sources for fresh data."
-        : "These rows demonstrate the product workflow and are not represented as live Bright Data output.",
+        ? "Timestamped replay from completed source runs. Run configured sources for fresh accepted records."
+        : "No accepted records are configured. Connect PostgreSQL and run authorised sources before using this environment.",
   }),
 );
 app.get("/api/opportunities/:id", async (request, response) => {
-  const opportunity = (await listOpportunities()).find(
+  const allOpportunities = await listOpportunities();
+  const opportunity = allOpportunities.find(
     (candidate) => candidate.id === request.params.id,
   );
   if (!opportunity) return response.status(404).json({ error: "Opportunity not found" });
@@ -592,9 +657,12 @@ app.post("/api/cron/collect", cron, async (_request, response) => {
 });
 const copilotRetrievalCache = new Map<string, { expiresAt:number; ids:string[] }>();
 const contractTokens=(value:string)=>new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token)=>token.length>2&&!new Set(['the','and','for','with','from','that','this','need','find','best','contract']).has(token)));
-const retrieveContracts=(question:string, opportunities:Awaited<ReturnType<typeof listOpportunities>>) => {
+const retrieveContracts=(question:string, opportunities:Opportunity[]) => {
   const key=question.trim().toLowerCase(); const cached=copilotRetrievalCache.get(key);
-  if(cached&&cached.expiresAt>Date.now()) return opportunities.filter((item)=>cached.ids.includes(item.id));
+  if(cached&&cached.expiresAt>Date.now()) {
+    const byId=new Map(opportunities.map((item)=>[item.id,item]));
+    return cached.ids.flatMap((id)=>byId.get(id)??[]);
+  }
   const terms=contractTokens(question);
   const requestedCountry=/\b(canada|canadian)\b/i.test(question)?'CA':/\b(australia|australian)\b/i.test(question)?'AU':/\b(united states|u\.s\.|usa|american)\b/i.test(question)?'US':null;
   const pool=opportunities.filter((item)=>item.status==='open'&&(!requestedCountry||item.countryCode===requestedCountry));
@@ -606,39 +674,47 @@ app.post("/api/copilot", async (request, response) => {
   const schema = z.object({
     opportunityId: z.string(),
     question: z.string().min(2).max(2000),
+    model: z.string().trim().min(1).max(180).optional(),
   });
   const parsed = schema.safeParse(request.body);
   if (!parsed.success)
     return response
       .status(400)
       .json({ error: "A valid opportunity and question are required" });
-  const opportunity = (await listOpportunities()).find(
+  const allOpportunities = await listCanonicalOpportunities();
+  const opportunity = allOpportunities.find(
     (item) => item.id === parsed.data.opportunityId,
   );
   if (!opportunity)
     return response.status(404).json({ error: "Opportunity not found" });
-  if (!process.env.NVIDIA_API_KEY || !process.env.NVIDIA_NIM_MODEL)
+  if (!nvidiaConfigured())
     return response
       .status(503)
       .json({ error: "NVIDIA NIM not configured", code: "NIM_NOT_CONFIGURED" });
   try {
+    const model = await selectChatModel(parsed.data.model);
     const provider = new NvidiaNimProvider({
-      apiKey: process.env.NVIDIA_API_KEY,
-      baseUrl:
-        process.env.NVIDIA_NIM_BASE_URL ??
-        "https://integrate.api.nvidia.com/v1",
-      model: process.env.NVIDIA_NIM_MODEL,
+      apiKey: nvidiaApiKey(),
+      baseUrl: NIM_BASE_URL,
+      model,
     });
     const workspace = postgres
       ? await postgres.getApplicationWorkspace(opportunity.id)
       : workspaces.get(opportunity.id);
-    response.json(
-      await provider.chat({
-        question: parsed.data.question,
-        opportunity,
-        workspace: workspace ?? undefined,
-      }),
-    );
+    const candidates = retrieveContracts(parsed.data.question, allOpportunities)
+      .filter((candidate) => candidate.id !== opportunity.id)
+      .slice(0, 5);
+    const result = await provider.chat({
+      question: parsed.data.question,
+      opportunity,
+      relatedOpportunities: candidates,
+      workspace: workspace ?? undefined,
+    });
+    response.json({
+      ...result,
+      recordsSearched: allOpportunities.length,
+      recordsRead: candidates.length + 1,
+    });
   } catch (error) {
     response.status(502).json({
       error: error instanceof Error ? error.message : "Copilot request failed",
@@ -646,13 +722,13 @@ app.post("/api/copilot", async (request, response) => {
   }
 });
 app.post('/api/copilot/search', async (request,response) => {
-  const parsed=z.object({question:z.string().trim().min(2).max(2000)}).safeParse(request.body);
+  const parsed=z.object({question:z.string().trim().min(2).max(2000),model:z.string().trim().min(1).max(180).optional()}).safeParse(request.body);
   if(!parsed.success)return response.status(400).json({error:'Enter a contract need to search for'});
-  const all=await listOpportunities();const candidates=retrieveContracts(parsed.data.question,all);
-  if(!candidates.length)return response.json({answer:'No open contracts matched the saved records. Try a capability, buyer, region, or industry term.',evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0});
-  const shortlist=candidates.slice(0,3);const fallback=`I searched ${all.length.toLocaleString()} saved open contract records. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
-  if(!process.env.NVIDIA_API_KEY||!process.env.NVIDIA_NIM_MODEL)return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM is not configured'});
-  try {const provider=new NvidiaNimProvider({apiKey:process.env.NVIDIA_API_KEY,baseUrl:process.env.NVIDIA_NIM_BASE_URL??'https://integrate.api.nvidia.com/v1',model:process.env.NVIDIA_NIM_FAST_MODEL??process.env.NVIDIA_NIM_MODEL});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead:candidates.length});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
+  const all=await listCanonicalOpportunities();const candidates=retrieveContracts(parsed.data.question,all);
+  if(!candidates.length)return response.json({answer:'No open contracts matched the accepted records. Try a capability, buyer, region, or industry term.',evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0});
+  const shortlist=candidates.slice(0,3);const fallback=`I searched ${all.length.toLocaleString()} accepted open contract records. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
+  if(!nvidiaConfigured())return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM is not configured'});
+  try {const model=await selectChatModel(parsed.data.model);const provider=new NvidiaNimProvider({apiKey:nvidiaApiKey(),baseUrl:NIM_BASE_URL,model});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead:candidates.length});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
 });
 app.listen(port, () =>
   console.log(`SecureContract API listening on http://localhost:${port}`),

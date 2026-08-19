@@ -80,7 +80,7 @@ Current proof status is documented in [docs/bright-data-proof.md](docs/bright-da
 
 SecureContract Copilot is an interpretation studio inside an opportunity, not a generic chatbot. The server sends a minimal context pack containing canonical fields, field evidence, source health, changes, and optional user-provided vendor facts. Its rules require explicit missing-data language and canonical evidence references. Unsupported citations are removed at the server boundary. It cannot claim legal eligibility, guarantee compliance, predict win probability, invent certifications, or submit a bid.
 
-Production returns `NVIDIA NIM not configured` when the key/model is absent. Tests mock only network transport; production never returns a fake AI answer. See [docs/nvidia-nim.md](docs/nvidia-nim.md).
+Production returns `NVIDIA NIM not configured` when the key is absent. The assistant lists the full authenticated NVIDIA catalog, separated into fast/non-reasoning and reasoning choices. Catalog entries are not a promise of account entitlement, so an unavailable selection preserves the retrieved official evidence and falls back safely instead of fabricating an answer. Tests mock only network transport; production never returns a fake AI answer. See [docs/nvidia-nim.md](docs/nvidia-nim.md).
 
 ## Database
 
@@ -113,7 +113,6 @@ DATABASE_URL=
 BRIGHT_DATA_API_TOKEN=
 NVIDIA_API_KEY=
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_NIM_MODEL=
 CRON_SECRET=
 BRIGHT_DATA_CREDENTIALS_PATH=
 DEMO_MODE=recorded-live

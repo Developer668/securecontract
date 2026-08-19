@@ -1,34 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
-  Bot,
+  Building2,
   Check,
   CheckCircle2,
   ChevronDown,
   CircleDot,
   Database,
+  FileCheck2,
   FileJson,
   Filter,
   History,
+  Layers3,
+  LogOut,
   Plus,
   RefreshCw,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
+  Settings,
+  UserRound,
   Wrench,
   X,
 } from "lucide-react";
+import LoadingState from "./components/ui/LoadingState";
 import type { Opportunity, SourceConfig } from "./types";
 
-type View = "opportunities" | "assistant" | "sources";
-type DetailTab =
-  | "summary"
-  | "evidence"
-  | "raw"
-  | "changes"
-  | "copilot";
+type View = "landing" | "opportunities" | "assistant" | "sources";
+type DetailTab = "summary" | "evidence" | "raw" | "changes" | "copilot";
 type SourceRunView = {
   status: string;
   rowCount: number;
@@ -41,10 +43,6 @@ type SourceRunView = {
 type SourceView = SourceConfig & {
   latestRun: SourceRunView | null;
   lastSuccessfulRun: SourceRunView | null;
-};
-type ServiceState = {
-  brightDataConfigured: boolean;
-  nvidiaConfigured: boolean;
 };
 type HealingRecord = {
   sourceId: string;
@@ -73,14 +71,14 @@ const fmt = (value: string | null, timezone?: string) =>
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
-function Brand() {
+function Brand({ onClick }: { onClick?: () => void }) {
   return (
-    <div className="brand">
+    <button className="brand" onClick={onClick} aria-label="SecureContract home">
       <span className="brand-mark">
         <ShieldCheck size={21} />
       </span>
       <span>SecureContract</span>
-    </div>
+    </button>
   );
 }
 function Status({
@@ -102,12 +100,13 @@ function Header({
   setView: (view: View) => void;
   provenance: string;
 }) {
+  const [profileOpen, setProfileOpen] = useState(false);
   const mode =
     provenance === "postgres"
       ? "Persistence-backed"
       : provenance === "recorded_live"
-        ? "Recorded live run"
-        : "Demonstration mode";
+        ? "Recorded source snapshot"
+        : "Source configuration required";
   const navigation: Array<[View, string]> = [
     ["opportunities", "Discover"],
     ["assistant", "Ask AI"],
@@ -115,7 +114,7 @@ function Header({
   ];
   return (
     <header>
-      <Brand />
+      <Brand onClick={() => setView("landing")} />
       <nav aria-label="Primary">
         {navigation.map(([item, text]) => (
           <button
@@ -128,8 +127,129 @@ function Header({
         ))}
       </nav>
       <div className="demo-label">{mode}</div>
-      <div className="avatar">AD</div>
+      <div className="profile-menu">
+        <button
+          className="avatar-toggle"
+          aria-label="Open account menu"
+          aria-haspopup="menu"
+          aria-expanded={profileOpen}
+          onClick={() => setProfileOpen((open) => !open)}
+        >
+          <span className="avatar">AD</span>
+          <ChevronDown size={14} />
+        </button>
+        {profileOpen && (
+          <div className="profile-dropdown" role="menu">
+            <div className="profile-summary">
+              <span className="avatar">AD</span>
+              <div>
+                <strong>Aditya Das</strong>
+                <small>Workspace owner</small>
+              </div>
+            </div>
+            <button role="menuitem" onClick={() => setProfileOpen(false)}>
+              <UserRound size={15} /> Profile
+            </button>
+            <button role="menuitem" onClick={() => setProfileOpen(false)}>
+              <Settings size={15} /> Preferences
+            </button>
+            <button className="profile-signout" role="menuitem" onClick={() => setProfileOpen(false)}>
+              <LogOut size={15} /> Sign out
+            </button>
+          </div>
+        )}
+      </div>
     </header>
+  );
+}
+
+function LandingPage({
+  onStart,
+  onAssistant,
+  opportunityCount,
+  sourceCount,
+  featured,
+}: {
+  onStart: () => void;
+  onAssistant: () => void;
+  opportunityCount: number;
+  sourceCount: number;
+  featured: Opportunity | null;
+}) {
+  return (
+    <main className="landing-page">
+      <section className="landing-hero">
+        <div className="landing-copy">
+          <p className="eyebrow">Public procurement intelligence</p>
+          <h1>Build your bid pipeline with context.</h1>
+          <p className="landing-lede">
+            A focused workspace for finding public opportunities, reviewing the original record, and preparing a confident next move.
+          </p>
+          <div className="landing-actions">
+            <button className="primary landing-primary" onClick={onStart}>
+              Browse opportunities <ArrowRight size={16} />
+            </button>
+            <button className="secondary" onClick={onAssistant}>
+              Research with AI
+            </button>
+          </div>
+          <div className="landing-brief-points">
+            <span><Search size={15} /> Discovery</span>
+            <span><FileCheck2 size={15} /> Source review</span>
+            <span><Layers3 size={15} /> Operations</span>
+          </div>
+        </div>
+        <div className="landing-record" aria-label="Current opportunity in the workspace">
+          <div className="landing-record-topline">
+            <span>In the current workspace</span>
+            <span>{featured ? label(featured.status) : "No record selected"}</span>
+          </div>
+          {featured ? (
+            <>
+              <div className="landing-record-title">
+                <Building2 size={20} />
+                <div>
+                  <strong>{featured.titleEnglish ?? featured.titleOriginal}</strong>
+                  <small>{featured.buyerOriginal}</small>
+                </div>
+              </div>
+              <dl className="landing-record-facts">
+                <div><dt>Location</dt><dd>{featured.countryName}{featured.jurisdiction ? ` / ${featured.jurisdiction}` : ""}</dd></div>
+                <div><dt>Deadline</dt><dd>{fmt(featured.submissionDueAt, featured.localTimezone)}</dd></div>
+                <div><dt>Procedure</dt><dd>{label(featured.procedureType)}</dd></div>
+                <div><dt>Record fields</dt><dd>{featured.evidence.length} documented</dd></div>
+              </dl>
+              <div className="landing-record-footer">
+                <span><FileJson size={15} /> Original record retained</span>
+                <a href={featured.detailUrl ?? featured.sourceUrl} target="_blank" rel="noreferrer">Open source <ArrowUpRight size={14} /></a>
+              </div>
+            </>
+          ) : (
+            <div className="landing-record-empty">
+              <Database size={22} />
+              <p>Connect a source and publish accepted records to begin research.</p>
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="landing-metrics" aria-label="Platform summary">
+        <div><strong>{opportunityCount.toLocaleString()}</strong><span>accepted opportunity records</span></div>
+        <div><strong>{sourceCount || "—"}</strong><span>configured source systems</span></div>
+        <div><strong>1 research desk</strong><span>from discovery to decision</span></div>
+      </section>
+      <section className="landing-workflow">
+        <div className="landing-workflow-intro">
+          <p className="eyebrow">A deliberate workflow</p>
+          <h2>Less hunting. More signal.</h2>
+          <p>Move directly between the work that matters: identifying a fit, checking the record, and managing the source operations behind it.</p>
+        </div>
+        <div className="landing-workflow-list">
+          <article><span>01</span><div><h3>Discover the right fit</h3><p>Search the current contract record set with precise filters and a readable, paginated result table.</p></div><ArrowRight size={17} /></article>
+          <article><span>02</span><div><h3>Review the actual record</h3><p>Inspect deadlines, changes, documents, and original-source links in one focused detail panel.</p></div><ArrowRight size={17} /></article>
+          <article><span>03</span><div><h3>Research with traceability</h3><p>Ask questions against accepted records and keep the supporting opportunities within reach.</p></div><ArrowRight size={17} /></article>
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -361,7 +481,7 @@ function Raw({ item, provenance }: { item: Opportunity; provenance: string }) {
             ? "Archived source row"
             : provenance === "recorded_live"
               ? "Completed Bright Data run"
-              : "Demonstration fixture"}
+              : "No recorded source run"}
         </Status>
       </div>
       <pre>{JSON.stringify(item.raw, null, 2)}</pre>
@@ -417,7 +537,7 @@ type WorkspaceTask = {
   label: string;
   status: "todo" | "done" | "blocked";
 };
-function Apply({ item }: { item: Opportunity }) {
+export function Apply({ item }: { item: Opportunity }) {
   const [status, setStatus] = useState("reviewing");
   const [notes, setNotes] = useState("");
   const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
@@ -528,107 +648,337 @@ function Apply({ item }: { item: Opportunity }) {
 }
 
 function Copilot({ item }: { item: Opportunity }) {
-  const [question, setQuestion] = useState("What should I verify before deciding whether to apply?");
-  const [response, setResponse] = useState<{
-    answer: string;
-    evidenceFields: string[];
-    draft: boolean;
-  } | null>(null);
+  const [question, setQuestion] = useState("");
+  const [models, setModels] = useState<
+    Array<{ id: string; mode: "non_reasoning" | "reasoning" }>
+  >([]);
+  const [model, setModel] = useState("");
+  const [messages, setMessages] = useState<
+    Array<{
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      evidenceFields?: string[];
+      recordsSearched?: number;
+    }>
+  >([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const fastModels = models.filter((candidate) => candidate.mode === "non_reasoning");
+  const reasoningModels = models.filter((candidate) => candidate.mode === "reasoning");
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/copilot/models")
+      .then((response) => response.ok
+        ? response.json() as Promise<{ data: typeof models; defaultModel: string }>
+        : null)
+      .then((body) => {
+        if (active && body) {
+          setModels(body.data);
+          setModel(body.defaultModel);
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   const ask = async () => {
+    const prompt = question.trim();
+    if (!prompt || loading) return;
     setLoading(true);
     setError("");
+    setQuestion("");
+    setMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: "user", text: prompt },
+    ]);
     try {
       const result = await fetch("/api/copilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ opportunityId: item.id, question }),
+        body: JSON.stringify({ opportunityId: item.id, question: prompt, model: model || undefined }),
       });
       const body = (await result.json()) as {
         answer?: string;
         evidenceFields?: string[];
-        draft?: boolean;
+        recordsSearched?: number;
         error?: string;
       };
-      if (!result.ok || !body.answer) throw new Error(body.error ?? "Copilot unavailable");
-      setResponse({
-        answer: body.answer,
-        evidenceFields: body.evidenceFields ?? [],
-        draft: body.draft ?? true,
-      });
+      if (!result.ok || !body.answer)
+        throw new Error(body.error ?? "Copilot unavailable");
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: body.answer ?? "",
+          evidenceFields: body.evidenceFields ?? [],
+          recordsSearched: body.recordsSearched,
+        },
+      ]);
     } catch (caught) {
-      setResponse(null);
-      setError(caught instanceof Error ? caught.message : "Unable to reach NVIDIA NIM");
+      setError(
+        caught instanceof Error ? caught.message : "Unable to reach NVIDIA NIM",
+      );
     } finally {
       setLoading(false);
     }
   };
   return (
-    <div className="copilot-studio">
-      <section className="copilot-intro">
-        <span className="copilot-orb"><Sparkles size={20} /></span>
+    <div className="detail-copilot">
+      <div className="detail-copilot-head">
         <div>
-          <p className="eyebrow">NVIDIA NIM · evidence mode</p>
-          <h3>Reason over this opportunity—not the open web.</h3>
-          <p>The copilot can interpret collected facts and identify gaps. It cannot invent requirements or decide eligibility.</p>
+          <p className="eyebrow">Opportunity research</p>
+          <h3>Ask about this opportunity.</h3>
         </div>
+        <button className="secondary" onClick={() => setMessages([])} disabled={loading}>New chat</button>
+      </div>
+      <section className="detail-copilot-messages" role="log" aria-live="polite">
+        {messages.length === 0 && !loading && (
+          <p className="detail-copilot-empty">Ask a specific question. SecureContract searches the accepted record set and cites evidence from the selected opportunity.</p>
+        )}
+        {messages.map((message) => (
+          <article key={message.id} className={`detail-copilot-message ${message.role}`}>
+            <span>{message.role === "assistant" ? <ShieldCheck size={14} /> : "You"}</span>
+            <div>
+              <p>{message.text}</p>
+              {message.evidenceFields?.length ? <small>Evidence: {message.evidenceFields.map(label).join(", ")}</small> : null}
+              {message.recordsSearched !== undefined ? <small>Searched {message.recordsSearched.toLocaleString()} accepted records.</small> : null}
+            </div>
+          </article>
+        ))}
       </section>
-      <div className="evidence-scope">
-        <span>Evidence in scope</span>
-        {item.evidence.map((evidence) => (
-          <code key={evidence.id}>{label(evidence.fieldName)}</code>
-        ))}
-      </div>
-      <div className="prompt-library">
-        {[
-          "Summarize the deadline and status.",
-          "What information is missing?",
-          "Create a verification checklist.",
-        ].map((value) => (
-          <button key={value} onClick={() => setQuestion(value)}>{value}</button>
-        ))}
-      </div>
-      <label className="copilot-composer">
-        <textarea
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          aria-label="Ask SecureContract question"
-          placeholder="Ask about deadlines, status, evidence, or missing requirements…"
-        />
-        <button disabled={loading || !question.trim()} onClick={() => void ask()} aria-label="Send question">
-          {loading ? <RefreshCw className="spin" size={18} /> : <Send size={18} />}
-        </button>
-      </label>
       {loading && (
-        <div className="copilot-thinking">
-          <span /><span /><span /> Checking the evidence boundary…
+        <LoadingState label="Searching accepted records" progressLabel="Reading opportunity evidence" />
+      )}
+      {error && (
+        <div className="inline-error" role="alert">
+          {error}
         </div>
       )}
-      {error && <div className="inline-error" role="alert">{error}</div>}
-      {response && (
-        <article className="copilot-response">
-          <div className="response-head">
-            <span><Bot size={17} /> SecureContract</span>
-            <Status tone="warn">Draft · verify</Status>
-          </div>
-          <p>{response.answer}</p>
-          <footer>
-            <span>Evidence cited</span>
-            {response.evidenceFields.map((field) => <code key={field}>{label(field)}</code>)}
-          </footer>
-        </article>
-      )}
+      <form className="detail-copilot-composer" onSubmit={(event) => { event.preventDefault(); void ask(); }}>
+        {models.length > 0 && <select aria-label="Copilot AI model" value={model} onChange={(event) => setModel(event.target.value)} disabled={loading}>
+          {fastModels.length > 0 && <optgroup label="Fast / non-reasoning">{fastModels.map((option) => <option key={option.id} value={option.id}>{option.id}</option>)}</optgroup>}
+          {reasoningModels.length > 0 && <optgroup label="Reasoning / slower">{reasoningModels.map((option) => <option key={option.id} value={option.id}>{option.id}</option>)}</optgroup>}
+        </select>}
+        <textarea value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Ask SecureContract question" placeholder="Ask a question about this opportunity…" />
+        <button className="primary" disabled={loading || !question.trim()} aria-label="Send question">{loading ? <RefreshCw className="spin" size={17} /> : <Send size={17} />}</button>
+      </form>
     </div>
   );
 }
 
 function ContractAssistant({ items }: { items: Opportunity[] }) {
-  const [question,setQuestion]=useState(''); const [loading,setLoading]=useState(false);
-  const [messages,setMessages]=useState<Array<{id:string;role:'user'|'assistant';text:string;ids?:string[];searched?:number;read?:number}>>([{id:'welcome',role:'assistant',text:'Describe the public contract you need. I will search the current open contract database, inspect the most relevant canonical records, and return official links for review.'}]);
-  const byId=new Map(items.map((item)=>[item.id,item]));
-  const send=async()=>{const prompt=question.trim();if(!prompt||loading)return;setQuestion('');setLoading(true);setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'user',text:prompt}]);try{const response=await fetch('/api/copilot/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:prompt})});const body=await response.json() as {answer?:string;error?:string;opportunityIds?:string[];recordsSearched?:number;recordsRead?:number};setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'assistant',text:body.answer??body.error??'The contract search could not answer.',ids:body.opportunityIds,searched:body.recordsSearched,read:body.recordsRead}]);}finally{setLoading(false)}};
-  return <main className="assistant-page"><section className="content full"><div className="page-title"><div><p className="eyebrow">SecureContract AI</p><h1>Find the right public contract.</h1><p>Retrieval searches only current open canonical records. Recommendations link directly to the collected official source.</p></div></div><section className="assistant-messages">{messages.map((message)=><article key={message.id} className={`assistant-message ${message.role}`}><span>{message.role==='assistant'?<Bot size={18}/>: 'You'}</span><div><p>{message.text}</p>{message.ids?.length?<div className="assistant-results">{message.ids.map((id)=>{const item=byId.get(id);return item?<a key={id} href={item.detailUrl??item.sourceUrl} target="_blank" rel="noreferrer"><strong>{item.titleOriginal}</strong><small>{item.buyerOriginal} · {item.countryName} · {fmt(item.submissionDueAt,item.localTimezone)}</small><em>Official source <ArrowUpRight size={12}/></em></a>:null})}</div>:null}{message.searched!==undefined&&<small className="search-accountability">Searched {message.searched.toLocaleString()} saved contracts · read {message.read} relevant records</small>}</div></article>)}{loading&&<p className="copilot-thinking"><span/><span/><span/> Retrieving contracts and official source context…</p>}</section><form className="assistant-composer" onSubmit={(event)=>{event.preventDefault();void send()}}><textarea value={question} onChange={(event)=>setQuestion(event.target.value)} placeholder="For example: cloud migration contracts in the US over the next 60 days"/><button className="primary" disabled={loading||!question.trim()} aria-label="Search contracts">{loading?<RefreshCw className="spin" size={18}/>:<Send size={18}/>}</button></form></section></main>;
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState<
+    Array<{ id: string; mode: "non_reasoning" | "reasoning" }>
+  >([]);
+  const [model, setModel] = useState("");
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [messages, setMessages] = useState<
+    Array<{
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      ids?: string[];
+      searched?: number;
+      read?: number;
+    }>
+  >([]);
+  const byId = new Map(items.map((item) => [item.id, item]));
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/copilot/models")
+      .then(async (response) =>
+        response.ok
+          ? (response.json() as Promise<{
+              data: Array<{
+                id: string;
+                mode: "non_reasoning" | "reasoning";
+              }>;
+              defaultModel: string;
+            }>)
+          : null,
+      )
+      .then((body) => {
+        if (active && body) {
+          setModels(body.data);
+          setModel(body.defaultModel);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  const send = async () => {
+    const prompt = question.trim();
+    if (!prompt || loading) return;
+    setQuestion("");
+    if (composerRef.current) composerRef.current.style.height = "auto";
+    setLoading(true);
+    setMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: "user", text: prompt },
+    ]);
+    try {
+      const response = await fetch("/api/copilot/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: prompt, model: model || undefined }),
+      });
+      const body = (await response.json()) as {
+        answer?: string;
+        error?: string;
+        opportunityIds?: string[];
+        recordsSearched?: number;
+        recordsRead?: number;
+      };
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text:
+            body.answer ??
+            body.error ??
+            "The contract search could not answer.",
+          ids: body.opportunityIds,
+          searched: body.recordsSearched,
+          read: body.recordsRead,
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const fastModels = models.filter((candidate) => candidate.mode === "non_reasoning");
+  const reasoningModels = models.filter((candidate) => candidate.mode === "reasoning");
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, loading]);
+  const resetConversation = () => {
+    if (loading) return;
+    setQuestion("");
+    setMessages([]);
+  };
+  return (
+    <main className="assistant-page">
+      <section className="assistant-shell">
+        <section className="assistant-chat" aria-busy={loading}>
+          <div className="assistant-chat-head">
+            <div><p className="eyebrow">Research</p><h1>Ask SecureContract</h1></div>
+            <div className="assistant-head-actions">
+              <button className="secondary assistant-new" onClick={resetConversation} disabled={loading}><Plus size={15} /> New chat</button>
+            </div>
+          </div>
+          <section className="assistant-messages" role="log" aria-live="polite">
+          {messages.length === 0 && !loading && (
+            <div className="assistant-welcome">
+              <span className="assistant-welcome-mark"><ShieldCheck size={22} /></span>
+              <h2>Start with a real procurement question.</h2>
+              <p>Search the accepted contract records and open the original sources behind the returned opportunities.</p>
+            </div>
+          )}
+          {messages.map((message) => (
+            <article
+              key={message.id}
+              className={`assistant-message ${message.role}`}
+            >
+              <span>
+                {message.role === "assistant" ? <ShieldCheck size={16} /> : "You"}
+              </span>
+              <div>
+                <p>{message.text}</p>
+                {message.ids?.length ? (
+                  <div className="assistant-results">
+                    {message.ids.map((id) => {
+                      const item = byId.get(id);
+                      return item ? (
+                        <a
+                          key={id}
+                          href={item.detailUrl ?? item.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <strong>{item.titleOriginal}</strong>
+                          <small>
+                            {item.buyerOriginal} · {item.countryName} ·{" "}
+                            {fmt(item.submissionDueAt, item.localTimezone)}
+                          </small>
+                          <em>
+                            Official source <ArrowUpRight size={12} />
+                          </em>
+                        </a>
+                      ) : null;
+                    })}
+                  </div>
+                ) : null}
+                {message.searched !== undefined && (
+                  <small className="search-accountability">
+                    Searched {message.searched.toLocaleString()} saved contracts
+                    · read {message.read} relevant records
+                  </small>
+                )}
+              </div>
+            </article>
+          ))}
+          {loading && (
+            <LoadingState label="Reviewing relevant records" progressLabel="Retrieving source evidence" />
+          )}
+          <div ref={messageEndRef} />
+          </section>
+          <form
+          className="assistant-composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void send();
+          }}
+          >
+          {models.length > 0 && (
+            <label className="assistant-model">
+              <span>Model</span>
+              <select aria-label="AI model" value={model} onChange={(event) => setModel(event.target.value)} disabled={loading}>
+                {fastModels.length > 0 && <optgroup label="Fast / non-reasoning">{fastModels.map((option) => <option key={option.id} value={option.id}>{option.id}</option>)}</optgroup>}
+                {reasoningModels.length > 0 && <optgroup label="Reasoning / slower">{reasoningModels.map((option) => <option key={option.id} value={option.id}>{option.id}</option>)}</optgroup>}
+              </select>
+            </label>
+          )}
+          <textarea
+            ref={composerRef}
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onInput={(event) => {
+              event.currentTarget.style.height = "auto";
+              event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 180)}px`;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+            rows={1}
+            placeholder="For example: cloud migration contracts in the US over the next 60 days"
+          />
+          <button
+            className="primary"
+            disabled={loading || !question.trim()}
+            aria-label="Search contracts"
+          >
+            {loading ? (
+              <RefreshCw className="spin" size={18} />
+            ) : (
+              <Send size={18} />
+            )}
+          </button>
+          </form>
+          <p className="assistant-composer-note"><ShieldCheck size={13} /> Search is restricted to the current accepted contract records.</p>
+        </section>
+      </section>
+    </main>
+  );
 }
 
 function Detail({
@@ -660,7 +1010,13 @@ function Detail({
           <button className="copilot-launch" onClick={() => setTab("copilot")}>
             <Sparkles size={15} /> Ask copilot
           </button>
-          <button className="icon-button" onClick={onClose} aria-label="Close detail"><X /></button>
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close detail"
+          >
+            <X />
+          </button>
         </div>
       </div>
       <div className="detail-meta">
@@ -729,11 +1085,14 @@ function OpportunitiesView({
   const [changeFilter, setChangeFilter] = useState("all");
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
   const [findingMore, setFindingMore] = useState(false);
   const [findState, setFindState] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const [selectedDetail, setSelectedDetail] = useState<Opportunity | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<Opportunity | null>(
+    null,
+  );
   const [tab, setTab] = useState<DetailTab>("summary");
   const [detailOpen, setDetailOpen] = useState(false);
   const countries = useMemo(
@@ -766,32 +1125,71 @@ function OpportunitiesView({
             (changeFilter === "changed" && item.changes.length > 0) ||
             (changeFilter === "critical" &&
               item.changes.some((change) => change.severity === "critical"))) &&
-          (!dueFrom || Boolean(item.submissionDueAt && item.submissionDueAt.slice(0, 10) >= dueFrom)) &&
-          (!dueTo || Boolean(item.submissionDueAt && item.submissionDueAt.slice(0, 10) <= dueTo)) &&
+          (!dueFrom ||
+            Boolean(
+              item.submissionDueAt &&
+                item.submissionDueAt.slice(0, 10) >= dueFrom,
+            )) &&
+          (!dueTo ||
+            Boolean(
+              item.submissionDueAt &&
+                item.submissionDueAt.slice(0, 10) <= dueTo,
+            )) &&
           item.buyerOriginal.toLowerCase().includes(buyer.toLowerCase()) &&
           `${item.titleOriginal} ${item.buyerOriginal} ${item.externalId}`
             .toLowerCase()
             .includes(search.toLowerCase()),
       ),
-    [items, search, country, status, sourceId, procedure, verification, changeFilter, dueFrom, dueTo, buyer],
+    [
+      items,
+      search,
+      country,
+      status,
+      sourceId,
+      procedure,
+      verification,
+      changeFilter,
+      dueFrom,
+      dueTo,
+      buyer,
+    ],
   );
   const selected =
     selectedDetail?.id === selectedId
       ? selectedDetail
-      : filtered.find((item) => item.id === selectedId) ?? null;
+      : (filtered.find((item) => item.id === selectedId) ?? null);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pageItems = filtered.slice(pageStart, pageStart + pageSize);
+  const pageButtons = Array.from(
+    {
+      length: Math.min(5, pageCount),
+    },
+    (_, index) => {
+      const first = Math.min(
+        Math.max(1, currentPage - 2),
+        Math.max(1, pageCount - 4),
+      );
+      return first + index;
+    },
+  );
   const findMore = async () => {
     setFindingMore(true);
     const publicSources = sources.filter(
       (source) =>
         source.status === "active" &&
-        (source.collectionMethod === "public_html" || source.collectionMethod === "public_api"),
+        (source.collectionMethod === "public_html" ||
+          source.collectionMethod === "public_api"),
     );
     let completed = 0;
     const failures: string[] = [];
     for (const source of publicSources) {
       try {
         await runSourceCollection(source, (state) =>
-          setFindState(`${completed + 1}/${publicSources.length} · ${source.countryCode} · ${state}`),
+          setFindState(
+            `${completed + 1}/${publicSources.length} · ${source.countryCode} · ${state}`,
+          ),
         );
         completed += 1;
       } catch {
@@ -836,33 +1234,116 @@ function OpportunitiesView({
               {provenance === "postgres"
                 ? "Validated canonical data"
                 : provenance === "recorded_live"
-                  ? "Recorded live run · timestamped"
-                  : "Demonstration fixtures · not live"}
+                  ? "Recorded source snapshot"
+                  : "Source configuration required"}
             </Status>
-            <button className="primary" disabled={findingMore} onClick={() => void findMore()}>
+            <button
+              className="primary"
+              disabled={findingMore}
+              onClick={() => void findMore()}
+            >
               <RefreshCw className={findingMore ? "spin" : ""} size={15} />
-              {findingMore ? "Searching public sources" : "Find more opportunities"}
+              {findingMore
+                ? "Searching public sources"
+                : "Find more opportunities"}
             </button>
           </div>
         </div>
         <details className="advanced-filters">
-            <summary><Filter size={14} /> Advanced filters <span>Buyer · procedure · dates · evidence · changes</span></summary>
-            <div className="advanced-filter-grid">
-              <label>Buyer or agency<input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="e.g. Transportation" /></label>
-              <label>Procedure<select value={procedure} onChange={(event) => setProcedure(event.target.value)}><option value="all">All procedures</option>{procedures.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
-              <label>Due from<input type="date" value={dueFrom} onChange={(event) => setDueFrom(event.target.value)} /></label>
-              <label>Due through<input type="date" value={dueTo} onChange={(event) => setDueTo(event.target.value)} /></label>
-              <label>Evidence<select value={verification} onChange={(event) => setVerification(event.target.value)}><option value="all">Any verification</option><option value="verified">Verified</option><option value="partial">Partial</option><option value="last_known_good">Last known good</option></select></label>
-              <label>Changes<select value={changeFilter} onChange={(event) => setChangeFilter(event.target.value)}><option value="all">Any change state</option><option value="changed">Has changes</option><option value="critical">Critical changes</option></select></label>
-              <button className="text-button" onClick={() => { setBuyer(""); setProcedure("all"); setDueFrom(""); setDueTo(""); setVerification("all"); setChangeFilter("all"); }}>Clear advanced filters</button>
-            </div>
+          <summary>
+            <Filter size={14} /> Advanced filters{" "}
+            <span>Buyer · procedure · dates · evidence · changes</span>
+          </summary>
+          <div className="advanced-filter-grid">
+            <label>
+              Buyer or agency
+              <input
+                value={buyer}
+              onChange={(event) => {
+                setBuyer(event.target.value);
+                setPage(1);
+              }}
+                placeholder="e.g. Transportation"
+              />
+            </label>
+            <label>
+              Procedure
+              <select
+                value={procedure}
+                onChange={(event) => setProcedure(event.target.value)}
+              >
+                <option value="all">All procedures</option>
+                {procedures.map((value) => (
+                  <option key={value} value={value}>
+                    {label(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Due from
+              <input
+                type="date"
+                value={dueFrom}
+                onChange={(event) => setDueFrom(event.target.value)}
+              />
+            </label>
+            <label>
+              Due through
+              <input
+                type="date"
+                value={dueTo}
+                onChange={(event) => setDueTo(event.target.value)}
+              />
+            </label>
+            <label>
+              Evidence
+              <select
+                value={verification}
+                onChange={(event) => setVerification(event.target.value)}
+              >
+                <option value="all">Any verification</option>
+                <option value="verified">Verified</option>
+                <option value="partial">Partial</option>
+                <option value="last_known_good">Last known good</option>
+              </select>
+            </label>
+            <label>
+              Changes
+              <select
+                value={changeFilter}
+                onChange={(event) => setChangeFilter(event.target.value)}
+              >
+                <option value="all">Any change state</option>
+                <option value="changed">Has changes</option>
+                <option value="critical">Critical changes</option>
+              </select>
+            </label>
+            <button
+              className="text-button"
+              onClick={() => {
+                setPage(1);
+                setBuyer("");
+                setProcedure("all");
+                setDueFrom("");
+                setDueTo("");
+                setVerification("all");
+                setChangeFilter("all");
+              }}
+            >
+              Clear advanced filters
+            </button>
+          </div>
         </details>
         <div className="toolbar">
           <label className="search">
             <Search size={17} />
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search opportunities or buyers…"
             />
           </label>
@@ -870,7 +1351,10 @@ function OpportunitiesView({
             <Filter size={15} />
             <select
               value={country}
-              onChange={(event) => setCountry(event.target.value)}
+              onChange={(event) => {
+                setCountry(event.target.value);
+                setPage(1);
+              }}
               aria-label="Country filter"
             >
               <option value="all">All countries</option>
@@ -885,7 +1369,10 @@ function OpportunitiesView({
           <div className="filter">
             <select
               value={sourceId}
-              onChange={(event) => setSourceId(event.target.value)}
+              onChange={(event) => {
+                setSourceId(event.target.value);
+                setPage(1);
+              }}
               aria-label="Source filter"
             >
               <option value="all">All sources</option>
@@ -900,7 +1387,10 @@ function OpportunitiesView({
           <div className="filter">
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
               aria-label="Status filter"
             >
               <option value="all">All statuses</option>
@@ -938,13 +1428,13 @@ function OpportunitiesView({
             {provenance === "postgres"
               ? "Only accepted runs are published"
               : provenance === "recorded_live"
-                ? "Replayed from completed live scraper runs"
-                : "Data shown is a clearly labeled product demonstration"}
+                ? "Recorded source snapshot"
+                : "Connect authorised sources to publish accepted records"}
           </span>
           {findState && <small>{findState}</small>}
         </div>
         <OpportunityTable
-          items={filtered.slice(0, visibleLimit)}
+          items={pageItems}
           selected={selected}
           onSelect={(item) => {
             setSelectedId(item.id);
@@ -957,12 +1447,55 @@ function OpportunitiesView({
               });
           }}
         />
-        {filtered.length > visibleLimit && (
-          <div className="more-results">
-            <span>Showing {visibleLimit.toLocaleString()} of {filtered.length.toLocaleString()}</span>
-            <button className="secondary" onClick={() => setVisibleLimit((value) => value + 100)}>Show 100 more</button>
-          </div>
-        )}
+        <div className="result-pagination">
+          <label>
+            Show
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setPage(1);
+              }}
+              aria-label="Results per page"
+            >
+              {[5, 10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+            per page
+          </label>
+          <span>
+            {filtered.length
+              ? `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} of ${filtered.length.toLocaleString()}`
+              : "0 results"}
+          </span>
+          <nav aria-label="Opportunity pages">
+            <button
+              className="secondary"
+              disabled={currentPage === 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+            >
+              Previous
+            </button>
+            {pageButtons.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                className={pageNumber === currentPage ? "page-current" : "page-number"}
+                aria-current={pageNumber === currentPage ? "page" : undefined}
+                onClick={() => setPage(pageNumber)}
+              >
+                {pageNumber}
+              </button>
+            ))}
+            <button
+              className="secondary"
+              disabled={currentPage === pageCount}
+              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+            >
+              Next
+            </button>
+          </nav>
+        </div>
       </section>
       {detailOpen && selected && (
         <Detail
@@ -995,7 +1528,9 @@ async function runSourceCollection(
   if (!trigger.ok)
     throw new Error(triggerBody.error ?? "Collection trigger failed");
   if (triggerBody.run) {
-    onState(`${triggerBody.run.validRowCount}/${triggerBody.run.rowCount} rows accepted`);
+    onState(
+      `${triggerBody.run.validRowCount}/${triggerBody.run.rowCount} rows accepted`,
+    );
     return;
   }
   if (!triggerBody.collectionId)
@@ -1003,9 +1538,12 @@ async function runSourceCollection(
   onState(`Bright Data snapshot ${triggerBody.collectionId}`);
   for (let attempt = 0; attempt < 90; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, 2_000));
-    const poll = await fetch(`/api/runs/poll/${encodeURIComponent(triggerBody.collectionId)}`, {
-      credentials: "include",
-    });
+    const poll = await fetch(
+      `/api/runs/poll/${encodeURIComponent(triggerBody.collectionId)}`,
+      {
+        credentials: "include",
+      },
+    );
     const body = (await poll.json()) as {
       error?: string;
       run?: { validRowCount: number; rowCount: number; status: string };
@@ -1022,7 +1560,9 @@ async function runSourceCollection(
     );
     return;
   }
-  throw new Error("Collection is still running. Retry shortly to see the latest run.");
+  throw new Error(
+    "Collection is still running. Retry shortly to see the latest run.",
+  );
 }
 
 function RunSource({
@@ -1051,7 +1591,11 @@ function RunSource({
     <div className="run-control">
       <button
         className="secondary"
-        disabled={unavailable || (!source.collectorId && source.collectionMethod === "bright_data") || running}
+        disabled={
+          unavailable ||
+          (!source.collectorId && source.collectionMethod === "bright_data") ||
+          running
+        }
         onClick={() => void run()}
       >
         <RefreshCw className={running ? "spin" : ""} size={14} />
@@ -1063,7 +1607,13 @@ function RunSource({
               ? "Refresh index"
               : "Run collector"}
       </button>
-      {state && <small className={state.includes("failed") ? "inline-error" : "run-state"}>{state}</small>}
+      {state && (
+        <small
+          className={state.includes("failed") ? "inline-error" : "run-state"}
+        >
+          {state}
+        </small>
+      )}
     </div>
   );
 }
@@ -1075,23 +1625,17 @@ function SourcesView({
   sources: SourceView[];
   onRefresh: () => Promise<void>;
 }) {
-  const [serviceState, setServiceState] = useState<ServiceState>({
-    brightDataConfigured: false,
-    nvidiaConfigured: false,
-  });
   const [healing, setHealing] = useState<HealingRecord[]>([]);
   const [refreshState, setRefreshState] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const loadLiveState = async () => {
-    const [health, ledger] = await Promise.all([
-      fetch("/api/health").then((response) => response.json()) as Promise<ServiceState>,
-      fetch("/api/healing").then((response) => response.json()) as Promise<{ data: HealingRecord[] }>,
-    ]);
-    setServiceState(health);
+  const loadHealing = async () => {
+    const ledger = (await fetch("/api/healing").then((response) =>
+      response.json(),
+    )) as { data: HealingRecord[] };
     setHealing(ledger.data);
   };
   useEffect(() => {
-    const task = window.setTimeout(() => void loadLiveState(), 0);
+    const task = window.setTimeout(() => void loadHealing(), 0);
     return () => window.clearTimeout(task);
   }, []);
   const refreshAll = async () => {
@@ -1099,22 +1643,30 @@ function SourcesView({
       (source) =>
         source.status === "active" &&
         source.publishToOpportunityFeed !== false &&
-        (source.collectionMethod !== "bright_data" || Boolean(source.collectorId)),
+        (source.collectionMethod !== "bright_data" ||
+          Boolean(source.collectorId)),
     );
     const ordered = [...active].sort((left, right) =>
-      left.collectionMethod !== "bright_data" && right.collectionMethod === "bright_data" ? -1 : 1,
+      left.collectionMethod !== "bright_data" &&
+      right.collectionMethod === "bright_data"
+        ? -1
+        : 1,
     );
     setRefreshing(true);
     try {
       for (const [index, source] of ordered.entries()) {
         await runSourceCollection(source, (state) =>
-          setRefreshState(`${index + 1}/${ordered.length} · ${source.countryCode} · ${state}`),
+          setRefreshState(
+            `${index + 1}/${ordered.length} · ${source.countryCode} · ${state}`,
+          ),
         );
       }
       setRefreshState(`${active.length} collectors refreshed`);
       await onRefresh();
     } catch (error) {
-      setRefreshState(error instanceof Error ? error.message : "Refresh failed");
+      setRefreshState(
+        error instanceof Error ? error.message : "Refresh failed",
+      );
     } finally {
       setRefreshing(false);
     }
@@ -1126,21 +1678,26 @@ function SourcesView({
           <div>
             <p className="eyebrow">Live collection</p>
             <h1>Sources</h1>
-            <p>Refresh every public feed, then publish only rows that pass validation.</p>
+            <p>
+              Refresh every public feed, then publish only rows that pass
+              validation.
+            </p>
           </div>
-          <button className="primary run-all" disabled={refreshing} onClick={() => void refreshAll()}>
+          <button
+            className="primary run-all"
+            disabled={refreshing}
+            onClick={() => void refreshAll()}
+          >
             <RefreshCw className={refreshing ? "spin" : ""} size={15} />
             {refreshing ? "Running live sources" : "Run all live sources"}
           </button>
         </div>
-        <section className="connection-strip" aria-label="Live configuration">
-          <div><span className={`connection-dot ${serviceState.brightDataConfigured ? "online" : ""}`} /> Bright Data</div>
-          <div><span className="connection-dot online" /> Official public sources</div>
-          <div><span className={`connection-dot ${serviceState.nvidiaConfigured ? "online" : ""}`} /> NVIDIA NIM</div>
-          <strong>{refreshState || `${sources.filter((source) => source.status === "active").length} sources ready`}</strong>
-        </section>
+        {refreshState && <p className="run-state operations-state">{refreshState}</p>}
         <div className="section-heading">
-          <div><p className="eyebrow">Current coverage</p><h2>Live feeds</h2></div>
+          <div>
+            <p className="eyebrow">Current coverage</p>
+            <h2>Live feeds</h2>
+          </div>
           <span className="ledger-note">US · Canada · Australia · India</span>
         </div>
         <div className="source-list">
@@ -1151,7 +1708,22 @@ function SourcesView({
                   <Database />
                 </div>
                 <div>
-                  <div className="source-title-line"><h2>{source.name}</h2><Status tone={source.status === "active" ? "good" : source.status === "degraded" ? "bad" : "warn"}>{source.status === "active" ? "Healthy" : label(source.status)}</Status></div>
+                  <div className="source-title-line">
+                    <h2>{source.name}</h2>
+                    <Status
+                      tone={
+                        source.status === "active"
+                          ? "good"
+                          : source.status === "degraded"
+                            ? "bad"
+                            : "warn"
+                      }
+                    >
+                      {source.status === "active"
+                        ? "Healthy"
+                        : label(source.status)}
+                    </Status>
+                  </div>
                   <p>
                     {source.countryName}
                     {source.jurisdictionName
@@ -1180,17 +1752,55 @@ function SourcesView({
           ))}
         </div>
         <details className="repair-drawer">
-          <summary><span><Wrench size={15} /> {healing.length} verified scraper repairs</span><small>View the self-healing evidence</small></summary>
+          <summary>
+            <span>
+              <Wrench size={15} /> {healing.length} verified scraper repairs
+            </span>
+            <small>View the self-healing evidence</small>
+          </summary>
           <div className="healing-grid">
             {healing.map((record) => (
               <article key={record.collectorId}>
-                <header><div><p className="eyebrow">{record.collectorId}</p><h3>{record.sourceName}</h3></div><Status tone={record.status === "verified" ? "good" : "warn"}>{label(record.status)}</Status></header>
+                <header>
+                  <div>
+                    <p className="eyebrow">{record.collectorId}</p>
+                    <h3>{record.sourceName}</h3>
+                  </div>
+                  <Status tone={record.status === "verified" ? "good" : "warn"}>
+                    {label(record.status)}
+                  </Status>
+                </header>
                 <ol>
-                  <li><span>01</span><div><strong>Detected</strong><p>{record.detected}</p></div></li>
-                  <li><span>02</span><div><strong>Repair</strong><p>{record.repair}</p></div></li>
-                  <li><span>03</span><div><strong>Outcome</strong><p>{record.outcome}</p></div></li>
+                  <li>
+                    <span>01</span>
+                    <div>
+                      <strong>Detected</strong>
+                      <p>{record.detected}</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span>02</span>
+                    <div>
+                      <strong>Repair</strong>
+                      <p>{record.repair}</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span>03</span>
+                    <div>
+                      <strong>Outcome</strong>
+                      <p>{record.outcome}</p>
+                    </div>
+                  </li>
                 </ol>
-                <footer><span><Check size={13} /> Same Collector ID</span><span><Check size={13} /> Reviewed</span></footer>
+                <footer>
+                  <span>
+                    <Check size={13} /> Same Collector ID
+                  </span>
+                  <span>
+                    <Check size={13} /> Reviewed
+                  </span>
+                </footer>
               </article>
             ))}
           </div>
@@ -1200,7 +1810,7 @@ function SourcesView({
   );
 }
 export default function App() {
-  const [view, setView] = useState<View>("opportunities");
+  const [view, setView] = useState<View>("landing");
   const [items, setItems] = useState<Opportunity[]>([]);
   const [sources, setSources] = useState<SourceView[]>([]);
   const [provenance, setProvenance] = useState("loading");
@@ -1208,12 +1818,12 @@ export default function App() {
   const loadData = useCallback(async () => {
     try {
       const [opportunityResponse, sourceResponse] = await Promise.all([
-      fetch("/api/opportunities").then((response) =>
-        response.json(),
-      ) as Promise<{ data: Opportunity[]; provenance: string }>,
-      fetch("/api/sources").then((response) => response.json()) as Promise<{
-        data: SourceView[];
-      }>,
+        fetch("/api/opportunities").then((response) =>
+          response.json(),
+        ) as Promise<{ data: Opportunity[]; provenance: string }>,
+        fetch("/api/sources").then((response) => response.json()) as Promise<{
+          data: SourceView[];
+        }>,
       ]);
       setItems(opportunityResponse.data);
       setSources(sourceResponse.data);
@@ -1228,7 +1838,7 @@ export default function App() {
     const task = window.setTimeout(() => void loadData(), 0);
     return () => window.clearTimeout(task);
   }, [loadData]);
-  if (provenance === "loading")
+  if (provenance === "loading" && view !== "landing")
     return (
       <>
         <Header view={view} setView={setView} provenance={provenance} />
@@ -1243,7 +1853,7 @@ export default function App() {
         </main>
       </>
     );
-  if (error)
+  if (error && view !== "landing")
     return (
       <>
         <Header view={view} setView={setView} provenance={provenance} />
@@ -1261,7 +1871,15 @@ export default function App() {
   return (
     <>
       <Header view={view} setView={setView} provenance={provenance} />
-      {view === "sources" ? (
+      {view === "landing" ? (
+        <LandingPage
+          onStart={() => setView("opportunities")}
+          onAssistant={() => setView("assistant")}
+          opportunityCount={items.length}
+          sourceCount={sources.length}
+          featured={items.find((item) => item.status === "open") ?? items[0] ?? null}
+        />
+      ) : view === "sources" ? (
         <SourcesView sources={sources} onRefresh={loadData} />
       ) : view === "assistant" ? (
         <ContractAssistant items={items} />
