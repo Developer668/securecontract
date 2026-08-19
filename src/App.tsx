@@ -22,13 +22,12 @@ import {
 } from "lucide-react";
 import type { Opportunity, SourceConfig } from "./types";
 
-type View = "opportunities" | "sources" | "application";
+type View = "opportunities" | "assistant" | "sources";
 type DetailTab =
   | "summary"
   | "evidence"
   | "raw"
   | "changes"
-  | "workspace"
   | "copilot";
 type SourceRunView = {
   status: string;
@@ -111,8 +110,8 @@ function Header({
         : "Demonstration mode";
   const navigation: Array<[View, string]> = [
     ["opportunities", "Discover"],
+    ["assistant", "Ask AI"],
     ["sources", "Operations"],
-    ["application", "Workspace"],
   ];
   return (
     <header>
@@ -624,6 +623,14 @@ function Copilot({ item }: { item: Opportunity }) {
   );
 }
 
+function ContractAssistant({ items }: { items: Opportunity[] }) {
+  const [question,setQuestion]=useState(''); const [loading,setLoading]=useState(false);
+  const [messages,setMessages]=useState<Array<{id:string;role:'user'|'assistant';text:string;ids?:string[];searched?:number;read?:number}>>([{id:'welcome',role:'assistant',text:'Describe the public contract you need. I will search the current open contract database, inspect the most relevant canonical records, and return official links for review.'}]);
+  const byId=new Map(items.map((item)=>[item.id,item]));
+  const send=async()=>{const prompt=question.trim();if(!prompt||loading)return;setQuestion('');setLoading(true);setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'user',text:prompt}]);try{const response=await fetch('/api/copilot/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:prompt})});const body=await response.json() as {answer?:string;error?:string;opportunityIds?:string[];recordsSearched?:number;recordsRead?:number};setMessages((current)=>[...current,{id:crypto.randomUUID(),role:'assistant',text:body.answer??body.error??'The contract search could not answer.',ids:body.opportunityIds,searched:body.recordsSearched,read:body.recordsRead}]);}finally{setLoading(false)}};
+  return <main className="assistant-page"><section className="content full"><div className="page-title"><div><p className="eyebrow">SecureContract AI</p><h1>Find the right public contract.</h1><p>Retrieval searches only current open canonical records. Recommendations link directly to the collected official source.</p></div></div><section className="assistant-messages">{messages.map((message)=><article key={message.id} className={`assistant-message ${message.role}`}><span>{message.role==='assistant'?<Bot size={18}/>: 'You'}</span><div><p>{message.text}</p>{message.ids?.length?<div className="assistant-results">{message.ids.map((id)=>{const item=byId.get(id);return item?<a key={id} href={item.detailUrl??item.sourceUrl} target="_blank" rel="noreferrer"><strong>{item.titleOriginal}</strong><small>{item.buyerOriginal} · {item.countryName} · {fmt(item.submissionDueAt,item.localTimezone)}</small><em>Official source <ArrowUpRight size={12}/></em></a>:null})}</div>:null}{message.searched!==undefined&&<small className="search-accountability">Searched {message.searched.toLocaleString()} saved contracts · read {message.read} relevant records</small>}</div></article>)}{loading&&<p className="copilot-thinking"><span/><span/><span/> Retrieving contracts and official source context…</p>}</section><form className="assistant-composer" onSubmit={(event)=>{event.preventDefault();void send()}}><textarea value={question} onChange={(event)=>setQuestion(event.target.value)} placeholder="For example: cloud migration contracts in the US over the next 60 days"/><button className="primary" disabled={loading||!question.trim()} aria-label="Search contracts">{loading?<RefreshCw className="spin" size={18}/>:<Send size={18}/>}</button></form></section></main>;
+}
+
 function Detail({
   item,
   sources,
@@ -678,7 +685,7 @@ function Detail({
       </div>
       <div className="tabs">
         {(
-          ["summary", "evidence", "changes", "raw", "workspace", "copilot"] as DetailTab[]
+          ["summary", "evidence", "changes", "raw", "copilot"] as DetailTab[]
         ).map((value) => (
           <button
             className={tab === value ? "active" : ""}
@@ -696,20 +703,17 @@ function Detail({
       {tab === "evidence" && <Evidence item={item} />}{" "}
       {tab === "raw" && <Raw item={item} provenance={provenance} />}{" "}
       {tab === "changes" && <Changes item={item} />}{" "}
-      {tab === "workspace" && <Apply item={item} />}
       {tab === "copilot" && <Copilot item={item} />}
     </aside>
   );
 }
 
 function OpportunitiesView({
-  openApplication,
   items,
   sources,
   provenance,
   onRefresh,
 }: {
-  openApplication: boolean;
   items: Opportunity[];
   sources: SourceView[];
   provenance: string;
@@ -728,16 +732,10 @@ function OpportunitiesView({
   const [visibleLimit, setVisibleLimit] = useState(100);
   const [findingMore, setFindingMore] = useState(false);
   const [findState, setFindState] = useState("");
-  const [selectedId, setSelectedId] = useState(
-    openApplication
-      ? items.find((item) => item.status === "open")?.id ?? items[0]?.id ?? ""
-      : "",
-  );
+  const [selectedId, setSelectedId] = useState("");
   const [selectedDetail, setSelectedDetail] = useState<Opportunity | null>(null);
-  const [tab, setTab] = useState<DetailTab>(
-    openApplication ? "workspace" : "summary",
-  );
-  const [detailOpen, setDetailOpen] = useState(openApplication);
+  const [tab, setTab] = useState<DetailTab>("summary");
+  const [detailOpen, setDetailOpen] = useState(false);
   const countries = useMemo(
     () => [
       ...new Map(
@@ -828,11 +826,9 @@ function OpportunitiesView({
       <section className="content">
         <div className="page-title">
           <div>
-            <h1>{openApplication ? "Application" : "Opportunities"}</h1>
+            <h1>Opportunities</h1>
             <p>
-              {openApplication
-                ? "Prepare a response with verified facts and visible gaps."
-                : "Public procurement opportunities with source-level provenance."}
+              Public procurement opportunities with source-level provenance.
             </p>
           </div>
           <div className="page-actions">
@@ -843,16 +839,13 @@ function OpportunitiesView({
                   ? "Recorded live run · timestamped"
                   : "Demonstration fixtures · not live"}
             </Status>
-            {!openApplication && (
-              <button className="primary" disabled={findingMore} onClick={() => void findMore()}>
-                <RefreshCw className={findingMore ? "spin" : ""} size={15} />
-                {findingMore ? "Searching public sources" : "Find more opportunities"}
-              </button>
-            )}
+            <button className="primary" disabled={findingMore} onClick={() => void findMore()}>
+              <RefreshCw className={findingMore ? "spin" : ""} size={15} />
+              {findingMore ? "Searching public sources" : "Find more opportunities"}
+            </button>
           </div>
         </div>
-        {!openApplication && (
-          <details className="advanced-filters">
+        <details className="advanced-filters">
             <summary><Filter size={14} /> Advanced filters <span>Buyer · procedure · dates · evidence · changes</span></summary>
             <div className="advanced-filter-grid">
               <label>Buyer or agency<input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="e.g. Transportation" /></label>
@@ -863,8 +856,7 @@ function OpportunitiesView({
               <label>Changes<select value={changeFilter} onChange={(event) => setChangeFilter(event.target.value)}><option value="all">Any change state</option><option value="changed">Has changes</option><option value="critical">Critical changes</option></select></label>
               <button className="text-button" onClick={() => { setBuyer(""); setProcedure("all"); setDueFrom(""); setDueTo(""); setVerification("all"); setChangeFilter("all"); }}>Clear advanced filters</button>
             </div>
-          </details>
-        )}
+        </details>
         <div className="toolbar">
           <label className="search">
             <Search size={17} />
@@ -1271,13 +1263,14 @@ export default function App() {
       <Header view={view} setView={setView} provenance={provenance} />
       {view === "sources" ? (
         <SourcesView sources={sources} onRefresh={loadData} />
+      ) : view === "assistant" ? (
+        <ContractAssistant items={items} />
       ) : (
         <OpportunitiesView
           key={`${view}-${provenance}`}
           items={items}
           sources={sources}
           provenance={provenance}
-          openApplication={view === "application"}
           onRefresh={loadData}
         />
       )}

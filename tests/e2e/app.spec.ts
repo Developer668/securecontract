@@ -19,8 +19,7 @@ test("core opportunity workflow", async ({ page }) => {
   await page.getByRole("button", { name: /Changes/ }).click();
   await expect(page.getByRole("heading", { name: "No material changes observed" })).toBeVisible();
   const detail = page.getByRole("complementary");
-  await detail.getByRole("button", { name: "Workspace" }).click();
-  await expect(page.getByRole("heading", { name: "Application checklist" })).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Workspace" })).toHaveCount(0);
   await detail.getByRole("button", { name: "Copilot", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Reason over this opportunity—not the open web." })).toBeVisible();
   await expect(page.getByText("Evidence in scope")).toBeVisible();

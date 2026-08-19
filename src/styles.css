@@ -324,6 +324,22 @@ td small { display: block; color: #7b8390; margin-top: 3px; }
 .onboard-stage p { max-width: 520px; margin: 0 auto 16px; color: var(--muted); line-height: 1.55; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 15px 24px; border-top: 1px solid var(--line); }
 
+.assistant-page .content { max-width: 1040px; }
+.assistant-messages { display: grid; gap: 16px; min-height: 420px; padding: 4px 0 98px; }
+.assistant-message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; max-width: 860px; }
+.assistant-message > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 800; }
+.assistant-message.user { justify-self: end; grid-template-columns: minmax(0, 1fr) 34px; }
+.assistant-message.user > span { grid-column: 2; background: var(--navy); color: white; }
+.assistant-message.user > div { grid-column: 1; grid-row: 1; background: var(--navy); color: white; border-radius: 12px; padding: 12px 15px; }
+.assistant-message p { margin: 4px 0; line-height: 1.58; white-space: pre-line; }
+.assistant-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; margin-top: 13px; }
+.assistant-results a { display: grid; gap: 4px; padding: 12px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 9px; text-decoration: none; }
+.assistant-results a:hover { border-color: var(--blue); }
+.assistant-results strong { font-size: 12px; line-height: 1.35; }.assistant-results small,.assistant-results em,.search-accountability { color: var(--muted); font-size: 10px; font-style: normal; }
+.assistant-composer { position: sticky; bottom: 16px; display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: end; padding: 10px; background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+.assistant-composer textarea { min-height: 48px; max-height: 140px; resize: vertical; border: 0; background: transparent; outline: 0; padding: 10px; }
+.assistant-composer button { width: 42px; height: 42px; padding: 0; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
 

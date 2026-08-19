@@ -590,6 +590,18 @@ app.post("/api/cron/collect", cron, async (_request, response) => {
     .status(202)
     .json({ triggered, skipped: allSources.length - configured.length });
 });
+const copilotRetrievalCache = new Map<string, { expiresAt:number; ids:string[] }>();
+const contractTokens=(value:string)=>new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token)=>token.length>2&&!new Set(['the','and','for','with','from','that','this','need','find','best','contract']).has(token)));
+const retrieveContracts=(question:string, opportunities:Awaited<ReturnType<typeof listOpportunities>>) => {
+  const key=question.trim().toLowerCase(); const cached=copilotRetrievalCache.get(key);
+  if(cached&&cached.expiresAt>Date.now()) return opportunities.filter((item)=>cached.ids.includes(item.id));
+  const terms=contractTokens(question);
+  const requestedCountry=/\b(canada|canadian)\b/i.test(question)?'CA':/\b(australia|australian)\b/i.test(question)?'AU':/\b(united states|u\.s\.|usa|american)\b/i.test(question)?'US':null;
+  const pool=opportunities.filter((item)=>item.status==='open'&&(!requestedCountry||item.countryCode===requestedCountry));
+  const ranked=pool.map((item)=>{const record=[item.titleOriginal,item.descriptionOriginal??'',item.descriptionEnglish??'',item.buyerOriginal,item.countryName,item.jurisdiction??'',...item.industryCodes.map((code)=>`${code.code} ${code.label??''}`),...item.evidence.map((evidence)=>`${evidence.fieldName} ${String(evidence.normalizedValue??'')}`)].join(' ').toLowerCase();let score=0;for(const term of terms)if(record.includes(term))score+=4;if(item.submissionDueAt&&new Date(item.submissionDueAt)>new Date())score+=1;return {item,score};}).filter(({score})=>terms.size===0||score>0).sort((a,b)=>b.score-a.score).slice(0,10).map(({item})=>item);
+  copilotRetrievalCache.set(key,{expiresAt:Date.now()+5*60_000,ids:ranked.map((item)=>item.id)});return ranked;
+};
+
 app.post("/api/copilot", async (request, response) => {
   const schema = z.object({
     opportunityId: z.string(),
@@ -632,6 +644,15 @@ app.post("/api/copilot", async (request, response) => {
       error: error instanceof Error ? error.message : "Copilot request failed",
     });
   }
+});
+app.post('/api/copilot/search', async (request,response) => {
+  const parsed=z.object({question:z.string().trim().min(2).max(2000)}).safeParse(request.body);
+  if(!parsed.success)return response.status(400).json({error:'Enter a contract need to search for'});
+  const all=await listOpportunities();const candidates=retrieveContracts(parsed.data.question,all);
+  if(!candidates.length)return response.json({answer:'No open contracts matched the saved records. Try a capability, buyer, region, or industry term.',evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0});
+  const shortlist=candidates.slice(0,3);const fallback=`I searched ${all.length.toLocaleString()} saved open contract records. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
+  if(!process.env.NVIDIA_API_KEY||!process.env.NVIDIA_NIM_MODEL)return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM is not configured'});
+  try {const provider=new NvidiaNimProvider({apiKey:process.env.NVIDIA_API_KEY,baseUrl:process.env.NVIDIA_NIM_BASE_URL??'https://integrate.api.nvidia.com/v1',model:process.env.NVIDIA_NIM_FAST_MODEL??process.env.NVIDIA_NIM_MODEL});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead:candidates.length});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
 });
 app.listen(port, () =>
   console.log(`SecureContract API listening on http://localhost:${port}`),
