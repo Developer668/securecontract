@@ -893,11 +893,12 @@ app.post("/api/funding/chat", async (request, response) => {
   if (!process.env.NVIDIA_API_KEY)
     return response.status(503).json({ error: "NVIDIA NIM not configured", code: "NIM_NOT_CONFIGURED" });
   const all = [...fundingOpportunityStore.values()];
+  const retrievalQuestion=[...parsed.data.history.filter((turn)=>turn.role==='user').map((turn)=>turn.content),parsed.data.question].join(' ');
   const selected = parsed.data.opportunityIds.length
     ? all.filter((item) => parsed.data.opportunityIds.includes(item.id))
-    : retrieveFunding(parsed.data.question,all);
+    : retrieveFunding(retrievalQuestion,all);
   if(!selected.length)return response.json({answer:'I could not find an open funding record that directly matches those terms. Try a research area, disease, applicant type, career stage, budget, or funder name.',evidenceIds:[],opportunityIds:[],followUpQuestions:['What research area or applicant type should I search for?'],draft:true,model:'retrieval',recordsSearched:all.length,recordsRead:0});
-  const answerKey=`${labProfile.updatedAt}:${parsed.data.question.trim().toLowerCase()}:${selected.map((item)=>item.id).join(',')}`;
+  const answerKey=`${labProfile.updatedAt}:${JSON.stringify(parsed.data.history)}:${parsed.data.question.trim().toLowerCase()}:${selected.map((item)=>item.id).join(',')}`;
   const cachedAnswer=fundingAnswerCache.get(answerKey);
   if(cachedAnswer&&cachedAnswer.expiresAt>Date.now())return response.json(cachedAnswer.body);
   try {
