@@ -660,6 +660,7 @@ function Copilot({ item }: { item: Opportunity }) {
       text: string;
       evidenceFields?: string[];
       recordsSearched?: number;
+      appliedFilters?: string[];
     }>
   >([]);
   const [error, setError] = useState("");
@@ -701,6 +702,7 @@ function Copilot({ item }: { item: Opportunity }) {
         answer?: string;
         evidenceFields?: string[];
         recordsSearched?: number;
+        appliedFilters?: string[];
         error?: string;
       };
       if (!result.ok || !body.answer)
@@ -713,6 +715,7 @@ function Copilot({ item }: { item: Opportunity }) {
           text: body.answer ?? "",
           evidenceFields: body.evidenceFields ?? [],
           recordsSearched: body.recordsSearched,
+          appliedFilters: body.appliedFilters,
         },
       ]);
     } catch (caught) {
@@ -743,6 +746,7 @@ function Copilot({ item }: { item: Opportunity }) {
               <p>{message.text}</p>
               {message.evidenceFields?.length ? <small>Evidence: {message.evidenceFields.map(label).join(", ")}</small> : null}
               {message.recordsSearched !== undefined ? <small>Searched {message.recordsSearched.toLocaleString()} accepted records.</small> : null}
+              {message.appliedFilters?.length ? <small>Applied: {message.appliedFilters.join(" / ")}</small> : null}
             </div>
           </article>
         ))}
@@ -784,6 +788,7 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
       ids?: string[];
       searched?: number;
       read?: number;
+      appliedFilters?: string[];
     }>
   >([]);
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -834,6 +839,7 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
         opportunityIds?: string[];
         recordsSearched?: number;
         recordsRead?: number;
+        appliedFilters?: string[];
       };
       setMessages((current) => [
         ...current,
@@ -847,6 +853,7 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
           ids: body.opportunityIds,
           searched: body.recordsSearched,
           read: body.recordsRead,
+          appliedFilters: body.appliedFilters,
         },
       ]);
     } finally {
@@ -917,10 +924,15 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
                 ) : null}
                 {message.searched !== undefined && (
                   <small className="search-accountability">
-                    Searched {message.searched.toLocaleString()} saved contracts
+                    Searched {message.searched.toLocaleString()} accepted contracts
                     · read {message.read} relevant records
                   </small>
                 )}
+                {message.appliedFilters?.length ? (
+                  <small className="search-accountability">
+                    Applied: {message.appliedFilters.join(" / ")}
+                  </small>
+                ) : null}
               </div>
             </article>
           ))}

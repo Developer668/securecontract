@@ -11,6 +11,7 @@ import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
 import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 import { closeExpiredOpportunity } from "../src/lib/normalization.js";
+import { searchContracts } from "../src/lib/contract-search.js";
 import { PostgresRepository } from "../db/repository.js";
 import type { Opportunity, SourceConfig } from "../src/types.js";
 
@@ -655,21 +656,6 @@ app.post("/api/cron/collect", cron, async (_request, response) => {
     .status(202)
     .json({ triggered, skipped: allSources.length - configured.length });
 });
-const copilotRetrievalCache = new Map<string, { expiresAt:number; ids:string[] }>();
-const contractTokens=(value:string)=>new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token)=>token.length>2&&!new Set(['the','and','for','with','from','that','this','need','find','best','contract']).has(token)));
-const retrieveContracts=(question:string, opportunities:Opportunity[]) => {
-  const key=question.trim().toLowerCase(); const cached=copilotRetrievalCache.get(key);
-  if(cached&&cached.expiresAt>Date.now()) {
-    const byId=new Map(opportunities.map((item)=>[item.id,item]));
-    return cached.ids.flatMap((id)=>byId.get(id)??[]);
-  }
-  const terms=contractTokens(question);
-  const requestedCountry=/\b(canada|canadian)\b/i.test(question)?'CA':/\b(australia|australian)\b/i.test(question)?'AU':/\b(united states|u\.s\.|usa|american)\b/i.test(question)?'US':null;
-  const pool=opportunities.filter((item)=>item.status==='open'&&(!requestedCountry||item.countryCode===requestedCountry));
-  const ranked=pool.map((item)=>{const record=[item.titleOriginal,item.descriptionOriginal??'',item.descriptionEnglish??'',item.buyerOriginal,item.countryName,item.jurisdiction??'',...item.industryCodes.map((code)=>`${code.code} ${code.label??''}`),...item.evidence.map((evidence)=>`${evidence.fieldName} ${String(evidence.normalizedValue??'')}`)].join(' ').toLowerCase();let score=0;for(const term of terms)if(record.includes(term))score+=4;if(item.submissionDueAt&&new Date(item.submissionDueAt)>new Date())score+=1;return {item,score};}).filter(({score})=>terms.size===0||score>0).sort((a,b)=>b.score-a.score).slice(0,10).map(({item})=>item);
-  copilotRetrievalCache.set(key,{expiresAt:Date.now()+5*60_000,ids:ranked.map((item)=>item.id)});return ranked;
-};
-
 app.post("/api/copilot", async (request, response) => {
   const schema = z.object({
     opportunityId: z.string(),
@@ -701,7 +687,8 @@ app.post("/api/copilot", async (request, response) => {
     const workspace = postgres
       ? await postgres.getApplicationWorkspace(opportunity.id)
       : workspaces.get(opportunity.id);
-    const candidates = retrieveContracts(parsed.data.question, allOpportunities)
+    const search = searchContracts(parsed.data.question, allOpportunities);
+    const candidates = search.items
       .filter((candidate) => candidate.id !== opportunity.id)
       .slice(0, 5);
     const result = await provider.chat({
@@ -714,6 +701,7 @@ app.post("/api/copilot", async (request, response) => {
       ...result,
       recordsSearched: allOpportunities.length,
       recordsRead: candidates.length + 1,
+      appliedFilters: search.constraints.appliedFilters,
     });
   } catch (error) {
     response.status(502).json({
@@ -724,11 +712,13 @@ app.post("/api/copilot", async (request, response) => {
 app.post('/api/copilot/search', async (request,response) => {
   const parsed=z.object({question:z.string().trim().min(2).max(2000),model:z.string().trim().min(1).max(180).optional()}).safeParse(request.body);
   if(!parsed.success)return response.status(400).json({error:'Enter a contract need to search for'});
-  const all=await listCanonicalOpportunities();const candidates=retrieveContracts(parsed.data.question,all);
-  if(!candidates.length)return response.json({answer:'No open contracts matched the accepted records. Try a capability, buyer, region, or industry term.',evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0});
-  const shortlist=candidates.slice(0,3);const fallback=`I searched ${all.length.toLocaleString()} accepted open contract records. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
-  if(!nvidiaConfigured())return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM is not configured'});
-  try {const model=await selectChatModel(parsed.data.model);const provider=new NvidiaNimProvider({apiKey:nvidiaApiKey(),baseUrl:NIM_BASE_URL,model});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead:candidates.length});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead:candidates.length,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
+  const all=await listCanonicalOpportunities();const search=searchContracts(parsed.data.question,all);const candidates=search.items;
+  const appliedFilters=search.constraints.appliedFilters;
+  if(!candidates.length)return response.json({answer:`No accepted open contracts matched all requested criteria: ${appliedFilters.join(', ')}. Try broadening the capability or deadline window.`,evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0,appliedFilters});
+  const shortlist=candidates.slice(0,3);const fallback=`I found ${candidates.length} accepted open contract records matching ${appliedFilters.join(', ')}. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
+  const recordsRead=Math.min(candidates.length,5);
+  if(!nvidiaConfigured())return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead,appliedFilters,warning:'NVIDIA NIM is not configured'});
+  try {const model=await selectChatModel(parsed.data.model);const provider=new NvidiaNimProvider({apiKey:nvidiaApiKey(),baseUrl:NIM_BASE_URL,model});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead,appliedFilters});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead,appliedFilters,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
 });
 app.listen(port, () =>
   console.log(`SecureContract API listening on http://localhost:${port}`),
