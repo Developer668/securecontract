@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-18T17:50:44.386Z",
+  "generatedAt": "2026-08-19T05:44:53.022Z",
   "replayProvenance": "completed_live_scraper_runs",
-  "canonicalOpportunityCount": 42150,
+  "canonicalOpportunityCount": 42325,
   "sourceResults": [
     {
       "slug": "australia-asl-tenders",
@@ -28,6 +28,16 @@
       "runStatus": "healthy",
       "published": 1,
       "archivedShape": "one immutable wrapper row; flattened after archival"
+    },
+    {
+      "slug": "canada-merx-open-bids",
+      "collectorId": "c_msywoiwt25k5frwn95",
+      "artifact": "canada-merx/run-live.json",
+      "artifactKind": "completed Bright Data custom collector dataset run (identity-complete replay)",
+      "runStatus": "healthy",
+      "published": 175,
+      "openStatusRows": 41,
+      "unknownStatusRows": 134
     },
     {
       "slug": "canada-canadabuys",

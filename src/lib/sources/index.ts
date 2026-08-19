@@ -410,11 +410,43 @@ export const procurementListingAdapter: SourceAdapter = {
   rawSchema: listingRawSchema,
   expandRows: (rows) =>
     rows.flatMap((row) => {
-      if (!Array.isArray(row.opportunities)) return [row];
-      return row.opportunities.filter(
-        (item): item is Record<string, unknown> =>
-          Boolean(item) && typeof item === "object" && !Array.isArray(item),
-      );
+      if (Array.isArray(row.opportunities)) {
+        return row.opportunities.filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === "object" && !Array.isArray(item),
+        );
+      }
+      // VendorPanel returns one wrapper per page with the useful listing
+      // fields nested under `tenders`. Flatten it at the adapter boundary so
+      // identity-complete rows are retained even when optional dates are
+      // missing from a later Bright Data batch.
+      if (Array.isArray(row.tenders)) {
+        const wrapperDetail = typeof row.product_page_url === "string"
+          ? row.product_page_url
+          : undefined;
+        return row.tenders
+          .filter(
+            (item): item is Record<string, unknown> =>
+              Boolean(item) && typeof item === "object" && !Array.isArray(item),
+          )
+          .map((item) => ({
+            ...item,
+            detail_url: item.detail_url ?? wrapperDetail,
+            source_url: item.source_url ?? (typeof row.input === "object" && row.input && "url" in row.input
+              ? row.input.url
+              : undefined),
+            status_raw: item.status_raw ?? item.status,
+            closing_date_raw: item.closing_date_raw ?? item.closing_date,
+            solicitation_id: item.solicitation_id ?? wrapperDetail?.match(/[?&]id=([^&]+)/)?.[1],
+          }));
+      }
+      return [
+        {
+          ...row,
+          status_raw: row.status_raw ?? row.status,
+          closing_date_raw: row.closing_date_raw ?? row.closing_date,
+        },
+      ];
     }),
   normalize: normalizeListing,
 };

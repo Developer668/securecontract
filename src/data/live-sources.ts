@@ -44,6 +44,9 @@ export const liveSources: SourceConfig[] = [
     collectorId: "c_msxy8dx318cy3aekq5",
     adapterKey: "california-cca-procurement",
     status: "active",
+    // Title and official detail URL are the identity minimum. Status/deadline
+    // may be absent in a Bright Data row; those records remain `unknown`
+    // rather than being mislabelled as open.
     requiredFields: ["project_title", "detail_url"],
     publicAccessVerifiedAt: "2026-08-17T23:45:00.000Z",
     prebuiltLibraryCheckedAt: null,
@@ -67,7 +70,9 @@ export const liveSources: SourceConfig[] = [
     collectorId: "c_msyxk9sd1olj4rz9i9",
     adapterKey: "procurement-listing",
     status: "active",
-    requiredFields: ["title", "detail_url", "closing_date_raw"],
+    // Identity is enough to retain a useful tender. A missing deadline is
+    // recorded as unknown rather than dropping the row.
+    requiredFields: ["title", "detail_url"],
     publicAccessVerifiedAt: "2026-08-18T17:30:00.000Z",
     prebuiltLibraryCheckedAt: null,
     publishToOpportunityFeed: true,
@@ -228,10 +233,12 @@ export const liveSources: SourceConfig[] = [
     collectorId: "c_msywoiwt25k5frwn95",
     adapterKey: "procurement-listing",
     status: "warning",
-    requiredFields: ["title", "detail_url", "closing_date_raw"],
+    // Keep identity-complete rows even when MERX omits the deadline in a
+    // listing export; status/date remain explicitly unknown until verified.
+    requiredFields: ["title", "detail_url"],
     publicAccessVerifiedAt: "2026-08-18T17:00:00.000Z",
     prebuiltLibraryCheckedAt: null,
-    publishToOpportunityFeed: false,
+    publishToOpportunityFeed: true,
     collectionMethod: "bright_data",
   },
   {

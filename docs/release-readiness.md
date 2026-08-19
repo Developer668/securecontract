@@ -35,7 +35,7 @@ Verified 2026-08-18. `PASS` means the behavior was executed, not inferred.
 
 ## SecureContract data and application
 
-Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 42,150 accepted opportunities, with a hard ceiling of 99,000; rejected MERX batches and the auxiliary AAI index are not silently promoted.
+Normalization, evidence, validation, last-known-good protection, material versioning, change severity, dynamic countries, advanced discovery filters, workspace persistence, one-click operations, tasks, and readiness boundaries all pass unit/integration or E2E verification. The canonical replay contains 42,325 accepted opportunities, with a hard ceiling of 99,000; MERX identity-complete review rows are retained while its shifted post-heal batch and the auxiliary AAI index are not silently promoted.
 
 ## NVIDIA NIM
 

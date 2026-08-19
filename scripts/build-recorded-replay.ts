@@ -39,6 +39,9 @@ const vendorPanelRows = vendorPanelArchivedRows.flatMap((wrapper) =>
 const ccaRows = readJson<unknown[]>(
   "fixtures/recorded-live/california-cca/post-heal-v3.json",
 );
+const merxRows = readJson<unknown[]>(
+  "fixtures/recorded-live/canada-merx/run-live.json",
+);
 const aaiRows = readJson<unknown[]>(
   "fixtures/recorded-live/india-aai/post-heal.json",
 );
@@ -59,6 +62,7 @@ const sanFranciscoRows = readJson<unknown[]>("fixtures/recorded-live/us-san-fran
 const aslSource = liveSources.find((source) => source.slug === "australia-asl-tenders");
 const vendorPanelSource = liveSources.find((source) => source.slug === "australia-vendorpanel-tenders");
 const ccaSource = liveSources.find((source) => source.slug === "california-cca-procurement");
+const merxSource = liveSources.find((source) => source.slug === "canada-merx-open-bids");
 const aaiSource = liveSources.find((source) => source.slug === "india-aai-publications");
 const canadaSource = liveSources.find((source) => source.slug === "canada-canadabuys");
 const tedSource = liveSources.find((source) => source.slug === "eu-ted-open-notices");
@@ -69,7 +73,7 @@ const chicagoSource = liveSources.find((source) => source.slug === "us-chicago-s
 const nycSource = liveSources.find((source) => source.slug === "us-nyc-current-bids");
 const montgomerySource = liveSources.find((source) => source.slug === "us-montgomery-solicitations");
 const sanFranciscoSource = liveSources.find((source) => source.slug === "us-san-francisco-bids");
-if (!aslSource || !vendorPanelSource || !ccaSource || !aaiSource || !canadaSource || !tedSource || !quebecSource || !texasSource || !losAngelesSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
+if (!aslSource || !vendorPanelSource || !ccaSource || !merxSource || !aaiSource || !canadaSource || !tedSource || !quebecSource || !texasSource || !losAngelesSource || !chicagoSource || !nycSource || !montgomerySource || !sanFranciscoSource)
   throw new Error("Recorded source configuration is incomplete");
 
 const aslResult = await ingestRows({
@@ -90,6 +94,13 @@ const ccaResult = await ingestRows({
   source: ccaSource,
   collectionId: "d2t1787014744903r0r6ggh7kkeg",
   rows: ccaRows,
+  store,
+  observedAt,
+});
+const merxResult = await ingestRows({
+  source: merxSource,
+  collectionId: "d2t1787015459903rmerxidentity",
+  rows: merxRows,
   store,
   observedAt,
 });
@@ -221,6 +232,16 @@ writeFileSync(
           archivedShape: "one immutable wrapper row; flattened after archival",
         },
         {
+          slug: merxSource.slug,
+          collectorId: merxSource.collectorId,
+          artifact: "canada-merx/run-live.json",
+          artifactKind: "completed Bright Data custom collector dataset run (identity-complete replay)",
+          runStatus: merxResult.run.status,
+          published: merxResult.published.length,
+          openStatusRows: merxResult.published.filter((row) => row.status === "open").length,
+          unknownStatusRows: merxResult.published.filter((row) => row.status === "unknown").length,
+        },
+        {
           slug: canadaSource.slug,
           collectorId: null,
           artifact: "canada-canadabuys/run-live.json",
@@ -328,6 +349,7 @@ console.log(
     aslStatus: aslResult.run.status,
     vendorPanelStatus: vendorPanelResult.run.status,
     ccaStatus: ccaResult.run.status,
+    merxStatus: merxResult.run.status,
     aaiContractValidRows: aaiValidCount,
     canadaStatus: canadaResult.run.status,
     tedStatus: tedResult.run.status,

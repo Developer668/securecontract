@@ -9,7 +9,7 @@ export function normalizeStatus(value: string | null | undefined): OpportunitySt
   if (/award/.test(text)) return 'awarded';
   if (/closed|expired/.test(text)) return 'closed';
   if (/planned|forecast/.test(text)) return 'planned';
-  if (/open|active|published/.test(text)) return 'open';
+  if (/open|active|published|ongoing|current|accepting|in progress/.test(text)) return 'open';
   return 'unknown';
 }
 
@@ -71,6 +71,28 @@ export function normalizeProcedure(value: string | null | undefined): ProcedureT
 
 export function parseLocalDate(value: string, timezone: string): string | null {
   const normalized = value.trim().replace(/\b(IST|AEST|AEDT|PDT|PST|UTC|GMT)\b/gi, '').replace(/\s*\|\s*/g, ' ').replace(/(\d)(am|pm)\b/gi, '$1 $2').replace(/\s+/g, ' ').trim();
+  // VendorPanel exposes dates such as
+  // `10/Sep/2026 11:00 AM (UTC+10:00) Brisbane time`. Preserve the explicit
+  // offset instead of discarding the row when the optional deadline uses this
+  // portal-specific format.
+  const vendorPanelDate = value.trim().match(
+    /^(\d{1,2})\/([A-Za-z]{3})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)\s*\(UTC([+-]\d{2}:\d{2})\)/i,
+  );
+  if (vendorPanelDate) {
+    const months: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    };
+    const month = months[vendorPanelDate[2].toLowerCase()];
+    if (month) {
+      const hour12 = Number(vendorPanelDate[4]);
+      const hour = (hour12 % 12) + (vendorPanelDate[6].toUpperCase() === 'PM' ? 12 : 0);
+      const parsed = new Date(
+        `${vendorPanelDate[3]}-${month}-${vendorPanelDate[1].padStart(2, '0')}T${String(hour).padStart(2, '0')}:${vendorPanelDate[5]}:00${vendorPanelDate[7]}`,
+      );
+      if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
+    }
+  }
   const leadingDate = normalized.match(
     /^\d{1,2} [A-Za-z]{3,9} \d{4}(?: \d{1,2}(?::\d{2})? ?(?:am|pm))?/i,
   )?.[0];
