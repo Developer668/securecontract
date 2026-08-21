@@ -80,6 +80,68 @@ const relativeDays = (value: string | null) => {
   return `closed ${-days} day${days < -1 ? "s" : ""} ago`;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  error?: boolean;
+};
+
+type ChatHistoryTurn = {
+  role: "user" | "assistant";
+  content: string;
+  opportunityIds?: string[];
+};
+
+const historyFromMessages = (
+  messages: Array<ChatMessage & { ids?: string[] }>,
+): ChatHistoryTurn[] =>
+  messages
+    .filter((message) => !message.error && message.text.trim().length > 0)
+    .slice(-10)
+    .map((message) => ({
+      role: message.role,
+      content: message.text.slice(0, 4000),
+      ...(message.role === "assistant" && message.ids?.length
+        ? { opportunityIds: message.ids.slice(0, 10) }
+        : {}),
+    }));
+
+const cleanAssistantText = (text: string): string =>
+  text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const postChatJson = async (
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> => {  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(75_000),
+  });
+  const raw = await response.text();
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    throw new Error(`The assistant service returned an invalid response (${response.status}).`);
+  }
+  if (!response.ok && typeof body.answer !== "string") {
+    throw new Error(
+      typeof body.error === "string"
+        ? body.error
+        : `The assistant request failed (${response.status}).`,
+    );
+  }
+  return body;
+};
+
 function Brand({ onClick }: { onClick?: () => void }) {
   return (
     <button className="brand" onClick={onClick} aria-label="SecureContract home">
@@ -671,6 +733,7 @@ function Copilot({ item }: { item: Opportunity }) {
       evidenceFields?: string[];
       recordsSearched?: number;
       appliedFilters?: string[];
+      warning?: boolean;
     }>
   >([]);
   const [error, setError] = useState("");
@@ -698,34 +761,30 @@ function Copilot({ item }: { item: Opportunity }) {
     setLoading(true);
     setError("");
     setQuestion("");
+    const history = historyFromMessages(messages);
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: "user", text: prompt },
     ]);
     try {
-      const result = await fetch("/api/copilot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ opportunityId: item.id, question: prompt, model: model || undefined }),
+      const body = await postChatJson("/api/copilot", {
+        opportunityId: item.id,
+        question: prompt,
+        model: model || undefined,
+        history,
       });
-      const body = (await result.json()) as {
-        answer?: string;
-        evidenceFields?: string[];
-        recordsSearched?: number;
-        appliedFilters?: string[];
-        error?: string;
-      };
-      if (!result.ok || !body.answer)
-        throw new Error(body.error ?? "Copilot unavailable");
+      const answer = typeof body.answer === "string" ? body.answer : undefined;
+      if (!answer) throw new Error("Copilot unavailable");
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: body.answer ?? "",
-          evidenceFields: body.evidenceFields ?? [],
-          recordsSearched: body.recordsSearched,
-          appliedFilters: body.appliedFilters,
+          text: cleanAssistantText(answer),
+          evidenceFields: (body.evidenceFields as string[]) ?? [],
+          recordsSearched: body.recordsSearched as number | undefined,
+          appliedFilters: body.appliedFilters as string[] | undefined,
+          warning: typeof body.warning === "string",
         },
       ]);
     } catch (caught) {
@@ -746,9 +805,9 @@ function Copilot({ item }: { item: Opportunity }) {
         <button className="secondary" onClick={() => setMessages([])} disabled={loading}>New chat</button>
       </div>
       <section className="detail-copilot-messages" role="log" aria-live="polite">
-        {messages.length === 0 && !loading && (
-          <p className="detail-copilot-empty">Ask a specific question. SecureContract searches the accepted record set and cites evidence from the selected opportunity.</p>
-        )}
+          {messages.length === 0 && !loading && (
+            <p className="detail-copilot-empty">Ask what delivering this work would involve, how you could apply, or about deadlines and requirements. Answers cite evidence from this record and comparable solicitations.</p>
+          )}
         {messages.map((message) => (
           <article key={message.id} className={`detail-copilot-message ${message.role}`}>
             <span>{message.role === "assistant" ? <ShieldCheck size={14} /> : "You"}</span>
@@ -757,6 +816,7 @@ function Copilot({ item }: { item: Opportunity }) {
               {message.evidenceFields?.length ? <small>Evidence: {message.evidenceFields.map(label).join(", ")}</small> : null}
               {message.recordsSearched !== undefined ? <small>Searched {message.recordsSearched.toLocaleString()} accepted records.</small> : null}
               {message.appliedFilters?.length ? <small>Applied: {message.appliedFilters.join(" / ")}</small> : null}
+              {message.warning ? <small>Generated without live AI verification — treat as a retrieved summary.</small> : null}
             </div>
           </article>
         ))}
@@ -799,6 +859,9 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
       searched?: number;
       read?: number;
       appliedFilters?: string[];
+      sourceSummary?: Array<[string, number]>;
+      warning?: boolean;
+      error?: boolean;
     }>
   >([]);
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -833,37 +896,46 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
     setQuestion("");
     if (composerRef.current) composerRef.current.style.height = "auto";
     setLoading(true);
+    const history = historyFromMessages(messages);
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: "user", text: prompt },
     ]);
     try {
-      const response = await fetch("/api/copilot/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: prompt, model: model || undefined }),
+      const body = await postChatJson("/api/copilot/search", {
+        question: prompt,
+        model: model || undefined,
+        history,
       });
-      const body = (await response.json()) as {
-        answer?: string;
-        error?: string;
-        opportunityIds?: string[];
-        recordsSearched?: number;
-        recordsRead?: number;
-        appliedFilters?: string[];
-      };
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: cleanAssistantText(
+            typeof body.answer === "string"
+              ? body.answer
+              : "The contract search could not answer.",
+          ),
+          ids: body.opportunityIds as string[] | undefined,
+          searched: body.recordsSearched as number | undefined,
+          read: body.recordsRead as number | undefined,
+          appliedFilters: body.appliedFilters as string[] | undefined,
+          sourceSummary: body.sourceSummary as Array<[string, number]> | undefined,
+          warning: typeof body.warning === "string",
+        },
+      ]);
+    } catch (caught) {
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
           text:
-            body.answer ??
-            body.error ??
-            "The contract search could not answer.",
-          ids: body.opportunityIds,
-          searched: body.recordsSearched,
-          read: body.recordsRead,
-          appliedFilters: body.appliedFilters,
+            caught instanceof Error
+              ? caught.message
+              : "The assistant request failed. Check your connection and try again.",
+          error: true,
         },
       ]);
     } finally {
@@ -895,13 +967,13 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
             <div className="assistant-welcome">
               <span className="assistant-welcome-mark"><ShieldCheck size={22} /></span>
               <h2>Start with a real procurement question.</h2>
-              <p>Search the accepted contract records and open the original sources behind the returned opportunities.</p>
+              <p>Search the accepted contract records, compare sources, and ask what a type of work involves or how to apply — every answer links the original records behind it.</p>
             </div>
           )}
           {messages.map((message) => (
             <article
               key={message.id}
-              className={`assistant-message ${message.role}`}
+              className={`assistant-message ${message.role}${message.error ? " message-error" : ""}`}
             >
               <span>
                 {message.role === "assistant" ? <ShieldCheck size={16} /> : "You"}
@@ -941,6 +1013,21 @@ function ContractAssistant({ items }: { items: Opportunity[] }) {
                 {message.appliedFilters?.length ? (
                   <small className="search-accountability">
                     Applied: {message.appliedFilters.join(" / ")}
+                  </small>
+                ) : null}
+                {message.sourceSummary?.length ? (
+                  <small className="search-accountability">
+                    Cross-referenced sources:{" "}
+                    {message.sourceSummary
+                      .slice(0, 4)
+                      .map(([name, count]) => `${name} (${count})`)
+                      .join(", ")}
+                  </small>
+                ) : null}
+                {message.warning ? (
+                  <small className="search-accountability">
+                    Generated without live AI verification — treat as a retrieved
+                    summary.
                   </small>
                 ) : null}
               </div>

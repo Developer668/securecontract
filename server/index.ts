@@ -11,7 +11,12 @@ import { ingestRows, MemoryIngestionStore } from "../src/lib/ingestion.js";
 import { assertPublicHttpUrl } from "../src/lib/security.js";
 import { scrapePublicSource } from "../src/lib/public-scrapers.js";
 import { closeExpiredOpportunity } from "../src/lib/normalization.js";
-import { searchContracts } from "../src/lib/contract-search.js";
+import {
+  getOpportunityIndex,
+  priorIdsFromHistory,
+  retrievalQuestion,
+  type ChatTurn,
+} from "../src/lib/ai/retrieval.js";
 import { PostgresRepository } from "../db/repository.js";
 import type { Opportunity, SourceConfig } from "../src/types.js";
 
@@ -657,11 +662,25 @@ app.post("/api/cron/collect", cron, async (_request, response) => {
     .status(202)
     .json({ triggered, skipped: allSources.length - configured.length });
 });
+const chatHistorySchema = z
+  .array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().trim().min(1).max(4000),
+      opportunityIds: z.array(z.string().min(1).max(200)).max(10).optional(),
+    }),
+  )
+  .max(12)
+  .optional()
+  .default([]);
+const historyTurns = (history: z.infer<typeof chatHistorySchema>): ChatTurn[] =>
+  history.map(({ role, content, opportunityIds }) => ({ role, content, opportunityIds }));
 app.post("/api/copilot", async (request, response) => {
   const schema = z.object({
     opportunityId: z.string(),
     question: z.string().min(2).max(2000),
     model: z.string().trim().min(1).max(180).optional(),
+    history: chatHistorySchema,
   });
   const parsed = schema.safeParse(request.body);
   if (!parsed.success)
@@ -688,38 +707,154 @@ app.post("/api/copilot", async (request, response) => {
     const workspace = postgres
       ? await postgres.getApplicationWorkspace(opportunity.id)
       : workspaces.get(opportunity.id);
-    const search = searchContracts(parsed.data.question, allOpportunities);
-    const candidates = search.items
-      .filter((candidate) => candidate.id !== opportunity.id)
-      .slice(0, 5);
+    const turns = historyTurns(parsed.data.history);
+    const index = getOpportunityIndex(allOpportunities);
+    const retrieval = index.search(retrievalQuestion(parsed.data.question, turns), {
+      priorIds: [...priorIdsFromHistory(turns), opportunity.id],
+      limit: 6,
+      skipTermRequirements: true,
+    });
+    const selfSimilar = index.search(
+      [
+        opportunity.titleOriginal,
+        opportunity.titleEnglish ?? "",
+        ...opportunity.industryCodes.map((code) => `${code.code} ${code.label ?? ""}`),
+      ].join(" "),
+      { status: "all", limit: 4 },
+    );
+    const candidatePool = new Map<string, Opportunity>();
+    for (const hit of [...retrieval.hits, ...selfSimilar.hits]) {
+      if (hit.item.id === opportunity.id) continue;
+      candidatePool.set(hit.item.id, hit.item);
+      if (candidatePool.size >= 6) break;
+    }
+    const candidates = [...candidatePool.values()];
     const result = await provider.chat({
       question: parsed.data.question,
+      history: turns.map(({ role, content }) => ({ role, content })),
       opportunity,
       relatedOpportunities: candidates,
       workspace: workspace ?? undefined,
+      mode: "record",
     });
     response.json({
       ...result,
       recordsSearched: allOpportunities.length,
       recordsRead: candidates.length + 1,
-      appliedFilters: search.constraints.appliedFilters,
+      appliedFilters: retrieval.appliedFilters,
     });
   } catch (error) {
+    console.error("[copilot] request failed:", error);
     response.status(502).json({
-      error: error instanceof Error ? error.message : "Copilot request failed",
+      error: "The AI service could not answer right now. Try again shortly.",
     });
   }
 });
-app.post('/api/copilot/search', async (request,response) => {
-  const parsed=z.object({question:z.string().trim().min(2).max(2000),model:z.string().trim().min(1).max(180).optional()}).safeParse(request.body);
-  if(!parsed.success)return response.status(400).json({error:'Enter a contract need to search for'});
-  const all=await listCanonicalOpportunities();const search=searchContracts(parsed.data.question,all);const candidates=search.items;
-  const appliedFilters=search.constraints.appliedFilters;
-  if(!candidates.length)return response.json({answer:`No accepted open contracts matched all requested criteria: ${appliedFilters.join(', ')}. Try broadening the capability or deadline window.`,evidenceFields:[],opportunityIds:[],draft:true,recordsSearched:all.length,recordsRead:0,appliedFilters});
-  const shortlist=candidates.slice(0,3);const fallback=`I found ${candidates.length} accepted open contract records matching ${appliedFilters.join(', ')}. The strongest leads are ${shortlist.map((item)=>`${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join('; ')}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
-  const recordsRead=Math.min(candidates.length,5);
-  if(!nvidiaConfigured())return response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead,appliedFilters,warning:'NVIDIA NIM is not configured'});
-  try {const model=await selectChatModel(parsed.data.model);const provider=new NvidiaNimProvider({apiKey:nvidiaApiKey(),baseUrl:NIM_BASE_URL,model});const result=await provider.chat({question:parsed.data.question,opportunity:candidates[0],relatedOpportunities:candidates});const answer=result.answer.trim().length<80?fallback:result.answer;response.json({...result,answer,opportunityIds:result.opportunityIds.length?result.opportunityIds:shortlist.map((item)=>item.id),recordsSearched:all.length,recordsRead,appliedFilters});}catch{response.json({answer:fallback,evidenceFields:[],opportunityIds:shortlist.map((item)=>item.id),draft:true,recordsSearched:all.length,recordsRead,appliedFilters,warning:'NVIDIA NIM was unavailable; showing deterministic retrieved results.'});}
+app.post("/api/copilot/search", async (request, response) => {
+  const parsed = z
+    .object({
+      question: z.string().trim().min(2).max(2000),
+      model: z.string().trim().min(1).max(180).optional(),
+      history: chatHistorySchema,
+    })
+    .safeParse(request.body);
+  if (!parsed.success)
+    return response.status(400).json({ error: "Enter a contract need to search for" });
+  const all = await listCanonicalOpportunities();
+  const turns = historyTurns(parsed.data.history);
+  const sources = await listSources();
+  const sourceNames = new Map(sources.map((source) => [source.id, source.name]));
+  const index = getOpportunityIndex(all);
+  const priorIdSet = [...new Set(priorIdsFromHistory(turns))];
+  const retrieval = index.search(retrievalQuestion(parsed.data.question, turns), {
+    priorIds: priorIdSet,
+    limit: 24,
+  });
+  const candidates = retrieval.hits.map((hit) => hit.item);
+  if (priorIdSet.length) {
+    const known = new Set(candidates.map((item) => item.id));
+    for (const priorId of priorIdSet.slice(0, 10)) {
+      if (known.size >= 30) break;
+      const record =
+        all.find((item) => item.id === priorId) ?? null;
+      if (record && !known.has(record.id)) {
+        candidates.push(record);
+        known.add(record.id);
+      }
+    }
+  }
+  const appliedFilters = retrieval.appliedFilters;
+  const sourceSummary = Object.entries(
+    candidates.reduce<Record<string, number>>((counts, item) => {
+      const name = sourceNames.get(item.sourceId) ?? item.sourceId;
+      counts[name] = (counts[name] ?? 0) + 1;
+      return counts;
+    }, {}),
+  ).sort((left, right) => right[1] - left[1]);
+  if (!candidates.length)
+    return response.json({
+      answer: `No accepted contract records matched all requested criteria: ${appliedFilters.join(", ")}. Try broadening the capability or deadline window.`,
+      evidenceFields: [],
+      opportunityIds: [],
+      draft: true,
+      recordsSearched: all.length,
+      recordsRead: 0,
+      appliedFilters,
+      sourceSummary,
+    });
+  const shortlist = candidates.slice(0, 3);
+  const fallback = `I found ${candidates.length} accepted contract record${candidates.length === 1 ? "" : "s"} matching ${appliedFilters.join(", ")}, drawn from ${sourceSummary.length} source${sourceSummary.length === 1 ? "" : "s"} (${sourceSummary.slice(0, 4).map(([name, count]) => `${name}: ${count}`).join(", ")}). The strongest leads are ${shortlist.map((item) => `${item.titleOriginal} (${item.buyerOriginal}, ${item.countryName})`).join("; ")}. Open each official record below to confirm scope, eligibility, amendments, and deadlines.`;
+  const recordsRead = Math.min(candidates.length, 8);
+  const basePayload = {
+    evidenceFields: [] as string[],
+    opportunityIds: shortlist.map((item) => item.id),
+    draft: true,
+    recordsSearched: all.length,
+    recordsRead,
+    appliedFilters,
+    sourceSummary,
+  };
+  if (!nvidiaConfigured())
+    return response.json({
+      answer: fallback,
+      ...basePayload,
+      warning: "NVIDIA NIM is not configured",
+    });
+  try {
+    const model = await selectChatModel(parsed.data.model);
+    const provider = new NvidiaNimProvider({
+      apiKey: nvidiaApiKey(),
+      baseUrl: NIM_BASE_URL,
+      model,
+    });
+    const result = await provider.chat({
+      question: parsed.data.question,
+      history: turns.map(({ role, content }) => ({ role, content })),
+      opportunity: candidates[0]!,
+      relatedOpportunities: candidates.slice(0, 12),
+      mode: "search",
+    });
+    const answer =
+      result.answer.trim().length < 80 ? fallback : result.answer;
+    return response.json({
+      ...result,
+      answer,
+      opportunityIds: result.opportunityIds.length
+        ? result.opportunityIds
+        : shortlist.map((item) => item.id),
+      recordsSearched: all.length,
+      recordsRead,
+      appliedFilters,
+      sourceSummary,
+    });
+  } catch (error) {
+    console.error("[copilot/search] falling back to deterministic results:", error);
+    return response.json({
+      answer: fallback,
+      ...basePayload,
+      warning: "NVIDIA NIM was unavailable; showing deterministic retrieved results.",
+    });
+  }
 });
 app.listen(port, () =>
   console.log(`SecureContract API listening on http://localhost:${port}`),

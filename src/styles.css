@@ -966,6 +966,8 @@ td small { display: block; color: #7b8390; margin-top: 3px; }
   font-weight: 800;
 }
 .assistant-message p { margin: 2px 0; font-size: 13px; line-height: 1.65; white-space: pre-line; }
+.assistant-message.message-error > div { border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); background: color-mix(in srgb, var(--red) 7%, var(--paper)); }
+.assistant-message.message-error p { color: var(--red); }
 .assistant-message.user { grid-template-columns: minmax(0, 1fr) 30px; justify-self: end; }
 .assistant-message.user > span { grid-column: 2; background: #263145; color: #fff; }
 .assistant-message.user > div {
