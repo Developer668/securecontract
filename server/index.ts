@@ -211,7 +211,8 @@ const listCanonicalOpportunities = async (): Promise<Opportunity[]> =>
 const listOpportunities = async () =>
   (await listCanonicalOpportunities()).slice(0, MAX_CANONICAL_OPPORTUNITIES);
 const NIM_BASE_URL = process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1";
-const DEFAULT_CHAT_MODEL = "deepseek-ai/deepseek-v4-flash-0731";
+const DEFAULT_CHAT_MODEL =
+  process.env.NVIDIA_NIM_MODEL ?? "deepseek-ai/deepseek-v4-flash-0731";
 type ChatModelMode = "non_reasoning" | "reasoning";
 type ChatModelOption = { id: string; mode: ChatModelMode };
 const REASONING_MODEL = /(?:reasoning|think(?:ing)?|deepseek-r1|qwq|gpt-oss|\bo[13]\b)/i;

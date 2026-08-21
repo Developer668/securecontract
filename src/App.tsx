@@ -70,6 +70,15 @@ const fmt = (value: string | null, timezone?: string) =>
     : "Not stated";
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+const relativeDays = (value: string | null) => {
+  if (!value) return null;
+  const due = new Date(value).getTime();
+  if (!Number.isFinite(due)) return null;
+  const days = Math.ceil((due - Date.now()) / 86_400_000);
+  if (days === 0) return "due today";
+  if (days > 0) return `in ${days} day${days > 1 ? "s" : ""}`;
+  return `closed ${-days} day${days < -1 ? "s" : ""} ago`;
+};
 
 function Brand({ onClick }: { onClick?: () => void }) {
   return (
@@ -296,6 +305,7 @@ function OpportunityTable({
               <td>{label(item.procedureType)}</td>
               <td className="deadline">
                 {fmt(item.submissionDueAt, item.localTimezone)}
+                <small>{relativeDays(item.submissionDueAt) ?? "No stated deadline"}</small>
               </td>
               <td>
                 <Status tone={item.status === "open" ? "good" : "neutral"}>

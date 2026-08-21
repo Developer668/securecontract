@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { NvidiaNimProvider } from "../src/lib/ai/nvidia/provider.js";
 import type { Opportunity } from "../src/types.js";
 
@@ -9,8 +10,10 @@ if (!apiKey || !baseUrl || !model) {
   throw new Error("NVIDIA_API_KEY, NVIDIA_NIM_BASE_URL, and NVIDIA_NIM_MODEL are required");
 }
 
+const replayPath = "fixtures/recorded-live/replay-opportunities.json.gz";
+if (!existsSync(replayPath)) throw new Error(`Recorded-live fixture is missing: ${replayPath}`);
 const opportunities = JSON.parse(
-  readFileSync("fixtures/recorded-live/replay-opportunities.json", "utf8"),
+  gunzipSync(readFileSync(replayPath)).toString("utf8"),
 ) as Opportunity[];
 const opportunity = opportunities[0];
 if (!opportunity) throw new Error("Recorded-live opportunity fixture is empty");

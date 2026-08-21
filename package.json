@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 0.0.0.0\" \"tsx watch --env-file=.env.local server/index.ts\"",
+    "dev": "concurrently -k \"vite --host 0.0.0.0\" \"tsx watch --env-file=.env.local --env-file-if-exists=.env.nim.local server/index.ts\"",
     "dev:web": "vite --host 0.0.0.0",
-    "dev:api": "tsx watch --env-file=.env.local server/index.ts",
+    "dev:api": "tsx watch --env-file=.env.local --env-file-if-exists=.env.nim.local server/index.ts",
     "build": "tsc -b && vite build",
-    "start": "tsx --env-file=.env.local server/index.ts",
+    "start": "tsx --env-file=.env.local --env-file-if-exists=.env.nim.local server/index.ts",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
@@ -20,7 +20,7 @@
     "capture:public": "tsx scripts/capture-public-sources.ts",
     "scraper:run": "tsx scripts/capture-public-sources.ts",
     "self-heal:demo": "tsx scripts/show-healing-proof.ts",
-    "verify:nim": "tsx --env-file=.env.local scripts/verify-nim.ts"
+    "verify:nim": "tsx --env-file=.env.local --env-file-if-exists=.env.nim.local scripts/verify-nim.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

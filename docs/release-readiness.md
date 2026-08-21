@@ -39,7 +39,7 @@ Normalization, evidence, validation, last-known-good protection, material versio
 
 ## NVIDIA NIM
 
-The server-only provider, grounded context pack, structured output validation, citation validation, mocked-transport tests, live NVIDIA API request, SecureContract API route, and Safari application flow pass. The key remains in git-ignored `.env.local`; production never substitutes a fake answer.
+The server-only provider, grounded context pack, structured output validation, citation validation, mocked-transport tests, live NVIDIA API request, SecureContract API route, and Safari application flow pass. The key remains in git-ignored local environment files; production never substitutes a fake answer.
 
 ## Build verification
 
